@@ -176,7 +176,7 @@ def preflight(ctx) -> int:
 
     if runtime_config.get_accelerator() == "cpu":
         from projects.rhaiis.toolbox.diagnose_cpu_cluster.main import run as diagnose_cpu_cluster
-        return diagnose_cpu_cluster()
+        diagnose_cpu_cluster()
 
     return 0
 

@@ -308,7 +308,7 @@ def concurrent_load(
 
     if models:
         model_keys = [x.strip() for x in models.split(",") if x.strip()]
-    elif runtime_config.get_test_model_key() != _pre_model:
+    elif runtime_config.get_test_model_key() != _pre_model and runtime_config.get_test_model_key().endswith("-cpu"):
         model_keys = [runtime_config.get_test_model_key()]
     else:
         model_keys = DEFAULT_MODEL_KEYS
@@ -317,7 +317,7 @@ def concurrent_load(
 
     if workloads:
         workload_keys = [x.strip() for x in workloads.split(",") if x.strip()]
-    elif runtime_config.get_test_workload_key() != _pre_workload:
+    elif runtime_config.get_test_workload_key() != _pre_workload and runtime_config.get_test_workload_key().startswith("cpu-"):
         workload_keys = [runtime_config.get_test_workload_key()]
     else:
         workload_keys = DEFAULT_WORKLOAD_KEYS

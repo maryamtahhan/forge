@@ -21,7 +21,7 @@ and image pull capability before committing to a namespace:
 ./bin/run_toolbox rhaiis diagnose_cpu_cluster
 ```
 
-The script checks:
+The toolbox checks:
 - Node resources (CPU, memory allocatable)
 - AVX2 support (required) and AVX-512 (optional, ~2-3x faster if present)
 - NUMA topology

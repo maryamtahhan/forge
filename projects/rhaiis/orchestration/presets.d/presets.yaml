@@ -8,6 +8,50 @@ nvidia:
 amd:
   rhaiis.accelerator: amd
 
+cpu:
+  rhaiis.accelerator: cpu
+  rhaiis.cpu_flavor: rhaiis
+  rhaiis.deploy.cpu_request: "16"
+  rhaiis.deploy.memory_request: "64Gi"
+
+cpu-vanilla:
+  rhaiis.accelerator: cpu
+  rhaiis.cpu_flavor: vanilla
+  rhaiis.deploy.cpu_request: "16"
+  rhaiis.deploy.memory_request: "64Gi"
+
+cpu-smoke:
+  tests.rhaiis.model_key: tinyllama-cpu
+  tests.rhaiis.workload_key: cpu-smoke
+  rhaiis.accelerator: cpu
+  rhaiis.cpu_flavor: rhaiis
+  rhaiis.deploy.cpu_request: "16"
+  rhaiis.deploy.memory_request: "64Gi"
+
+vanilla-cpu-smoke:
+  tests.rhaiis.model_key: tinyllama-cpu
+  tests.rhaiis.workload_key: cpu-smoke
+  rhaiis.accelerator: cpu
+  rhaiis.cpu_flavor: vanilla
+  rhaiis.deploy.cpu_request: "16"
+  rhaiis.deploy.memory_request: "64Gi"
+
+cpu-chat-baseline:
+  tests.rhaiis.model_key: llama31-8b-w8a8-cpu
+  tests.rhaiis.workload_key: cpu-chat-baseline
+  rhaiis.accelerator: cpu
+  rhaiis.cpu_flavor: rhaiis
+  rhaiis.deploy.cpu_request: "16"
+  rhaiis.deploy.memory_request: "64Gi"
+
+vanilla-cpu-chat-baseline:
+  tests.rhaiis.model_key: llama31-8b-w8a8-cpu
+  tests.rhaiis.workload_key: cpu-chat-baseline
+  rhaiis.accelerator: cpu
+  rhaiis.cpu_flavor: vanilla
+  rhaiis.deploy.cpu_request: "16"
+  rhaiis.deploy.memory_request: "64Gi"
+
 # ── Engine ───────────────────────────────────────────────────
 
 vllm:

@@ -171,7 +171,8 @@ def _apply_cli_overrides(
     if serving_image:
         if resolved_accel == "cpu":
             flavor = runtime_config.get_cpu_flavor()
-            config.project.set_config(f"rhaiis.images.cpu-{flavor}", serving_image)
+            cpu_image_key = "rhaiis.images.cpu-vanilla" if flavor == "vanilla" else "rhaiis.images.cpu"
+            config.project.set_config(cpu_image_key, serving_image)
         else:
             config.project.set_config(
                 f"rhaiis.engines.{resolved_engine}.images.{resolved_accel}",
@@ -191,7 +192,7 @@ def _apply_cli_overrides(
     if storage_pvc:
         config.project.set_config("rhaiis.deploy.storage_pvc", storage_pvc)
     if image_pull_secret:
-        config.project.set_config("rhaiis.deploy.image_pull_secret", image_pull_secret)
+        config.project.set_config("rhaiis.deploy.image_pull_secrets", [image_pull_secret])
     if service_account_name:
         config.project.set_config("rhaiis.deploy.service_account_name", service_account_name)
     if rates:
@@ -231,7 +232,7 @@ def _print_dry_run(
     click.echo(
         f"  Storage: {deploy_cfg.get('storage_source', 'hf')} (pvc={deploy_cfg.get('storage_pvc', '')})"
     )
-    click.echo(f"  Image pull secret: {deploy_cfg.get('image_pull_secret') or '(none)'}")
+    click.echo(f"  Image pull secrets: {deploy_cfg.get('image_pull_secrets') or '(none)'}")
     click.echo(f"  Service account: {deploy_cfg.get('service_account_name') or '(none)'}")
     click.echo(f"  Rates: {workload_cfg.get('rates', [1])}")
     click.echo(f"  Max seconds: {workload_cfg.get('max_seconds', 180)}")
@@ -260,7 +261,7 @@ def _print_dry_run(
 @click.option(
     "--cpu-flavor",
     type=click.Choice(["rhaiis", "vanilla"]),
-    default="vanilla",
+    default=None,
     help="CPU vLLM flavor: 'vanilla' (upstream) or 'rhaiis' (Red Hat)",
 )
 @click.option("--image-pull-secret", help="Image pull secret name")
@@ -275,7 +276,7 @@ def concurrent_load(
     cpu_requests: str | None,
     workloads: str | None,
     namespace: str | None,
-    cpu_flavor: str,
+    cpu_flavor: str | None,
     image_pull_secret: str | None,
     service_account_name: str | None,
     continue_on_error: bool,
@@ -285,8 +286,10 @@ def concurrent_load(
     for name in preset:
         config.project.apply_preset(name)
 
+    if cpu_flavor:
+        config.project.set_config("rhaiis.cpu_flavor", cpu_flavor)
     if image_pull_secret:
-        config.project.set_config("rhaiis.deploy.image_pull_secret", image_pull_secret)
+        config.project.set_config("rhaiis.deploy.image_pull_secrets", [image_pull_secret])
     if service_account_name:
         config.project.set_config("rhaiis.deploy.service_account_name", service_account_name)
 
@@ -296,10 +299,11 @@ def concurrent_load(
         DEFAULT_WORKLOAD_KEYS,
     )
 
-    model_keys = models.split(",") if models else DEFAULT_MODEL_KEYS
-    cpu_request_list = cpu_requests.split(",") if cpu_requests else DEFAULT_CPU_REQUESTS
-    workload_keys = workloads.split(",") if workloads else DEFAULT_WORKLOAD_KEYS
+    model_keys = [x.strip() for x in models.split(",") if x.strip()] if models else DEFAULT_MODEL_KEYS
+    cpu_request_list = [x.strip() for x in cpu_requests.split(",") if x.strip()] if cpu_requests else DEFAULT_CPU_REQUESTS
+    workload_keys = [x.strip() for x in workloads.split(",") if x.strip()] if workloads else DEFAULT_WORKLOAD_KEYS
     resolved_ns = namespace or runtime_config.get_namespace()
+    resolved_flavor = runtime_config.get_cpu_flavor()
 
     total = len(model_keys) * len(cpu_request_list) * len(workload_keys)
     click.echo(
@@ -311,7 +315,7 @@ def concurrent_load(
     click.echo(f"  CPU requests: {cpu_request_list}")
     click.echo(f"  Workloads:    {workload_keys}")
     click.echo(f"  Namespace:    {resolved_ns}")
-    click.echo(f"  CPU flavor:   {cpu_flavor}")
+    click.echo(f"  CPU flavor:   {resolved_flavor}")
 
     if dry_run:
         click.echo("[DRY-RUN] Would run the above matrix.")
@@ -325,7 +329,6 @@ def concurrent_load(
             cpu_requests=cpu_request_list,
             workload_keys=workload_keys,
             namespace=resolved_ns,
-            cpu_flavor=cpu_flavor,
             continue_on_error=continue_on_error,
         )
     except Exception as exc:

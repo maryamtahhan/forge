@@ -124,7 +124,7 @@ python -m projects.rhaiis.orchestration.cli concurrent-load \
   --continue-on-error
 ```
 
-`--cpu-flavor` defaults to `vanilla`. For RHAIIS:
+`--cpu-flavor` defaults to the config value (`vanilla`) when omitted. For RHAIIS:
 
 ```bash
 python -m projects.rhaiis.orchestration.cli concurrent-load \
@@ -143,7 +143,7 @@ python -m projects.rhaiis.orchestration.cli concurrent-load \
 | `--models` | `tinyllama-cpu` | See CPU models below |
 | `--cpu-requests` | `8,16,32` | Limit to 8,16 on nodes with <24 vCPUs |
 | `--workloads` | `cpu-chat-baseline` | See CPU workloads below |
-| `--cpu-flavor` | `vanilla` | `vanilla` or `rhaiis` |
+| `--cpu-flavor` | config default (`vanilla`) | Pass explicitly to override; omitting preserves preset value |
 
 ### CPU models
 
@@ -174,6 +174,39 @@ python -m projects.rhaiis.orchestration.cli concurrent-load \
 |---|---|
 | `vanilla` | `docker.io/vllm/vllm-openai-cpu:v0.25.1` |
 | `rhaiis` | `registry.redhat.io/rhaii/vllm-cpu-rhel9:3.4.0` |
+
+## Presets
+
+CPU-specific presets are defined in `presets.d/presets.yaml` and can be
+combined with model/workload presets:
+
+| Preset | Flavor | Model key | Workload key |
+|---|---|---|---|
+| `cpu` | rhaiis | (from config) | (from config) |
+| `cpu-vanilla` | vanilla | (from config) | (from config) |
+| `cpu-smoke` | rhaiis | `tinyllama-cpu` | `cpu-smoke` |
+| `vanilla-cpu-smoke` | vanilla | `tinyllama-cpu` | `cpu-smoke` |
+| `cpu-chat-baseline` | rhaiis | `llama31-8b-w8a8-cpu` | `cpu-chat-baseline` |
+| `vanilla-cpu-chat-baseline` | vanilla | `llama31-8b-w8a8-cpu` | `cpu-chat-baseline` |
+
+Example with a preset:
+
+```bash
+python -m projects.rhaiis.orchestration.cli test \
+  -p cpu-smoke \
+  --namespace forge-rhaiis \
+  --image-pull-secret rhaiis-pull-secret \
+  --dry-run
+```
+
+## Config validation
+
+Run offline (no cluster required) to verify CPU image selection, LD_PRELOAD
+isolation, max-model-len precedence, and resource Guaranteed QoS:
+
+```bash
+PYTHONPATH=$PWD python projects/rhaiis/orchestration/test_cpu_config.py
+```
 
 ## Cleanup
 

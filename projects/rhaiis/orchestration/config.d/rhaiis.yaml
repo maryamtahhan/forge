@@ -73,7 +73,6 @@ vllm_args_cpu:
   trust-remote-code: true
   no-enable-log-requests: true
   uvicorn-log-level: debug
-  max-model-len: 8192
   tensor-parallel-size: 1
 
 env_vars: {}

@@ -137,9 +137,9 @@ def build_inferenceservice(
         "resources": resources,
     }
 
-    if storage_source == "pvc" and storage_pvc:
+    if storage_source == "hf" and storage_pvc:
         model_spec["storageUri"] = f"pvc://{storage_pvc}/"
-    elif storage_source not in ("hf", "pvc"):
+    elif storage_source != "hf":
         model_spec["storageUri"] = f"{storage_source}://{model_id}"
 
     predictor: dict[str, Any] = {
@@ -184,6 +184,12 @@ def _build_resources(
     engine: str,
 ) -> dict[str, Any]:
     resources: dict[str, Any] = {}
+
+    if accelerator == "cpu":
+        resources["limits"] = {"cpu": cpu_request, "memory": memory_request}
+        resources["requests"] = {"cpu": cpu_request, "memory": memory_request}
+        return resources
+
     gpu_key = "nvidia.com/gpu" if accelerator == "nvidia" else "amd.com/gpu"
 
     if accelerator in ("nvidia", "amd"):

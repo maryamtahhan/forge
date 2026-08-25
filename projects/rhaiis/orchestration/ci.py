@@ -97,6 +97,10 @@ def resolve_hardware_request(hardware_spec: dict) -> dict:
     if hardware_spec.get("gpuType"):
         return hardware_spec
 
+    accelerator = runtime_config.get_accelerator()
+    if accelerator == "cpu":
+        return {}
+
     from projects.core.library import config as _cfg
 
     model_key = runtime_config.get_test_model_key()
@@ -106,7 +110,6 @@ def resolve_hardware_request(hardware_spec: dict) -> dict:
     ea = runtime_config.merge_engine_args(engine_defaults, model, {}, engine)
     tp_size = int(ea.get("tensor-parallel-size") or ea.get("tp-size") or ea.get("tp_size") or 1)
 
-    accelerator = runtime_config.get_accelerator()
     gpu_type = runtime_config.get_gpu_type(accelerator)
 
     if not gpu_type:

@@ -19,7 +19,6 @@ def run(
     cpu_requests: list[str] | None = None,
     workload_keys: list[str] | None = None,
     namespace: str,
-    cpu_flavor: str = "vanilla",
     continue_on_error: bool = False,
 ) -> int:
     return run_and_postprocess(
@@ -28,7 +27,6 @@ def run(
         cpu_requests=cpu_requests,
         workload_keys=workload_keys,
         namespace=namespace,
-        cpu_flavor=cpu_flavor,
         continue_on_error=continue_on_error,
     )
 
@@ -39,11 +37,9 @@ def do_test(
     cpu_requests: list[str] | None = None,
     workload_keys: list[str] | None = None,
     namespace: str,
-    cpu_flavor: str = "vanilla",
     continue_on_error: bool = False,
 ) -> int:
     config.project.set_config("rhaiis.accelerator", "cpu")
-    config.project.set_config("rhaiis.cpu_flavor", cpu_flavor)
 
     resolved_models = model_keys or DEFAULT_MODEL_KEYS
     resolved_cpu_requests = cpu_requests or DEFAULT_CPU_REQUESTS

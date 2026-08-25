@@ -273,6 +273,18 @@ oc describe pod -n forge-rhaiis -l serving.kserve.io/inferenceservice=<name> | g
 Common causes: insufficient CPU/memory on node, missing PVC.
 Node has ~23.5 vCPUs on the lab cluster — limit `--cpu-requests` to `8,16`.
 
+### vLLM crashes: KV cache too large
+
+```
+ValueError: Available memory on node 0 (X GiB) is less than requested
+memory for kv (40.0 GiB).
+```
+
+The default `VLLM_CPU_KVCACHE_SPACE=10` (10 GiB) is set for nodes with
+16–32 GiB per NUMA node. If you have more RAM, override it per-model via
+`env_vars.VLLM_CPU_KVCACHE_SPACE` in `config.d/models.yaml` or set
+`rhaiis.accelerator_env_vars.cpu.VLLM_CPU_KVCACHE_SPACE` in a preset.
+
 ### `secret "storage-config" not found`
 
 ```bash

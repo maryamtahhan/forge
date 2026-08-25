@@ -82,7 +82,7 @@ accelerator_env_vars:
   amd:
     VLLM_ROCM_USE_AITER: "1"
   cpu:
-    VLLM_CPU_KVCACHE_SPACE: "40"
+    VLLM_CPU_KVCACHE_SPACE: "10"
   cpu-rhaiis:
     LD_PRELOAD: /usr/lib64/libomp.so
   cpu-vanilla: {}

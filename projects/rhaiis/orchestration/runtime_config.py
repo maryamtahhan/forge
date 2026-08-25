@@ -24,6 +24,10 @@ def get_accelerator() -> str:
     return config.project.get_config("rhaiis.accelerator")
 
 
+def get_cpu_flavor() -> str:
+    return config.project.get_config("rhaiis.cpu_flavor", "vanilla")
+
+
 def get_gpu_type(accelerator: str) -> str | None:
     gpu_types = config.project.get_config("rhaiis.gpu_types", None)
     if gpu_types and accelerator in gpu_types:
@@ -45,6 +49,12 @@ def get_engine() -> str:
 
 def get_serving_image(accelerator: str, engine: str | None = None) -> str:
     engine = engine or get_engine()
+    if accelerator == "cpu":
+        flavor = get_cpu_flavor()
+        try:
+            return config.project.get_config(f"rhaiis.images.cpu-{flavor}")
+        except Exception:
+            return config.project.get_config("rhaiis.images.cpu")
     try:
         return config.project.get_config(f"rhaiis.engines.{engine}.images.{accelerator}")
     except Exception:
@@ -53,6 +63,10 @@ def get_serving_image(accelerator: str, engine: str | None = None) -> str:
 
 def get_engine_args(engine: str | None = None) -> dict:
     engine = engine or get_engine()
+    if get_accelerator() == "cpu":
+        cpu_args = config.project.get_config("rhaiis.vllm_args_cpu", None)
+        if cpu_args:
+            return dict(cpu_args)
     return dict(config.project.get_config(f"rhaiis.engines.{engine}.args", {}))
 
 
@@ -150,6 +164,12 @@ def merge_engine_args(
 def merge_env_vars(accelerator: str, model: dict) -> dict:
     base = dict(config.project.get_config("rhaiis.env_vars") or {})
     base.update(model.get("env_vars", {}))
+    if accelerator == "cpu":
+        for key in ("cpu", f"cpu-{get_cpu_flavor()}"):
+            accel_vars = config.project.get_config(
+                f"rhaiis.accelerator_env_vars.{key}") or {}
+            base.update(accel_vars)
+        return base
     accel_vars = config.project.get_config(f"rhaiis.accelerator_env_vars.{accelerator}") or {}
     base.update(accel_vars)
     return base

@@ -137,9 +137,9 @@ def build_inferenceservice(
         "resources": resources,
     }
 
-    if storage_source == "hf" and storage_pvc:
+    if storage_source == "pvc" and storage_pvc:
         model_spec["storageUri"] = f"pvc://{storage_pvc}/"
-    elif storage_source != "hf":
+    elif storage_source not in ("hf", "pvc"):
         model_spec["storageUri"] = f"{storage_source}://{model_id}"
 
     predictor: dict[str, Any] = {

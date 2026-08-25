@@ -18,14 +18,6 @@ from projects.core.dsl import (
 from projects.core.dsl.utils.k8s import oc_resource_exists
 
 
-def _get_node_names() -> list[str]:
-    result = shell.run(
-        "oc get nodes -o jsonpath='{.items[*].metadata.name}'",
-        check=False,
-    )
-    return result.stdout.strip().strip("'").split()
-
-
 @entrypoint
 def run():
     """Diagnose OpenShift cluster suitability for CPU vLLM benchmarking."""
@@ -42,13 +34,18 @@ def show_node_resources(args, context):
         "STATUS:.status.conditions[-1].type",
         check=False,
     )
+    nodes_result = shell.run(
+        "oc get nodes -o jsonpath='{.items[*].metadata.name}'",
+        check=False,
+    )
+    context.nodes = nodes_result.stdout.strip().strip("'").split()
     print(result.stdout)
-    return "Node resources listed"
+    return f"Node resources listed ({len(context.nodes)} node(s))"
 
 
 @task
 def check_cpu_instruction_sets(args, context):
-    nodes = _get_node_names()
+    nodes = context.nodes
     for node in nodes:
         flags_result = shell.run(
             f"oc debug node/{node} -- chroot /host sh -c "
@@ -68,7 +65,7 @@ def check_cpu_instruction_sets(args, context):
 
 @task
 def check_numa_topology(args, context):
-    nodes = _get_node_names()
+    nodes = context.nodes
     for node in nodes:
         numa_result = shell.run(
             f"oc debug node/{node} -- chroot /host numactl --hardware",
@@ -84,7 +81,7 @@ def check_numa_topology(args, context):
 
 @task
 def check_cpu_manager_policy(args, context):
-    nodes = _get_node_names()
+    nodes = context.nodes
     for node in nodes:
         state_result = shell.run(
             f"oc debug node/{node} -- chroot /host "

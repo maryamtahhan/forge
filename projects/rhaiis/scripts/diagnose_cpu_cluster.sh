@@ -59,7 +59,7 @@ echo
 
 # Image pull capability
 echo "--- vLLM CPU Images ---"
-echo "  RHAIIS:  registry.redhat.io/rhaii/vllm-cpu-rhel9:3.4.0"
+echo "  RHAIIS:  registry.redhat.io/rhaii/vllm-cpu-rhel9:3.5.0-1786546771"
 echo "  Vanilla: docker.io/vllm/vllm-openai-cpu:v0.25.1"
 echo "  (pull test requires image pull secret for RHAIIS image)"
 echo

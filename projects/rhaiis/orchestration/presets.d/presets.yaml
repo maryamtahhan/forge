@@ -43,6 +43,7 @@ cpu-chat-baseline:
   rhaiis.cpu_flavor: rhaiis
   rhaiis.deploy.cpu_request: "16"
   rhaiis.deploy.memory_request: "64Gi"
+  rhaiis.accelerator_env_vars.cpu.VLLM_CPU_KVCACHE_SPACE: "24"
 
 vanilla-cpu-chat-baseline:
   tests.rhaiis.model_key: llama31-8b-w8a8-cpu
@@ -51,6 +52,7 @@ vanilla-cpu-chat-baseline:
   rhaiis.cpu_flavor: vanilla
   rhaiis.deploy.cpu_request: "16"
   rhaiis.deploy.memory_request: "64Gi"
+  rhaiis.accelerator_env_vars.cpu.VLLM_CPU_KVCACHE_SPACE: "24"
 
 # ── Engine ───────────────────────────────────────────────────
 

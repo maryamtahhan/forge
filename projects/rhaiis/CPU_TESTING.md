@@ -90,7 +90,7 @@ mkdir -p $ARTIFACT_DIR
 
 ## Single-Run Tests
 
-### Step 5: Smoke test
+### Smoke test
 
 After cluster setup (steps 1–6 above), run a smoke test to confirm the stack
 is working end-to-end before committing to a longer benchmark.
@@ -151,14 +151,28 @@ python -m projects.rhaiis.orchestration.cli test \
 The concurrent load test sweeps `models × cpu_requests × workloads`, matching
 the format-results `concurrent-load` suite.
 
-### Step 6: Run the matrix
+### Run the matrix
 
 #### Vanilla (recommended starting point)
 
+> **Note**: TinyLlama's `max-model-len` is 2048; do not use `cpu-rag-baseline`
+> with it (prompt_tokens=7680 exceeds the context limit). Use `qwen3-0-6b-cpu`
+> or another model without a 2048 cap for RAG workloads.
+
 ```bash
+# TinyLlama — chat workloads only (max-model-len: 2048)
 python -m projects.rhaiis.orchestration.cli concurrent-load \
   --preset cpu-vanilla \
   --models tinyllama-cpu \
+  --cpu-requests 8,16 \
+  --workloads cpu-chat-baseline \
+  --namespace forge-rhaiis \
+  --continue-on-error
+
+# Qwen3-0.6B — chat + RAG (no max-model-len cap)
+python -m projects.rhaiis.orchestration.cli concurrent-load \
+  --preset cpu-vanilla \
+  --models qwen3-0-6b-cpu \
   --cpu-requests 8,16 \
   --workloads cpu-chat-baseline,cpu-rag-baseline \
   --namespace forge-rhaiis \
@@ -277,12 +291,13 @@ Node has ~23.5 vCPUs on the lab cluster — limit `--cpu-requests` to `8,16`.
 
 ```
 ValueError: Available memory on node 0 (X GiB) is less than requested
-memory for kv (40.0 GiB).
+memory for kv (10.0 GiB).
 ```
 
-The default `VLLM_CPU_KVCACHE_SPACE=10` (10 GiB) is set for nodes with
-16–32 GiB per NUMA node. If you have more RAM, override it per-model via
-`env_vars.VLLM_CPU_KVCACHE_SPACE` in `config.d/models.yaml` or set
+The default `VLLM_CPU_KVCACHE_SPACE=10` (10 GiB) is tuned for nodes with
+16–32 GiB per NUMA node. If you have more RAM (e.g. for Llama 3.1 8B + RAG),
+raise it per-model via `env_vars.VLLM_CPU_KVCACHE_SPACE` in
+`config.d/models.yaml` or set
 `rhaiis.accelerator_env_vars.cpu.VLLM_CPU_KVCACHE_SPACE` in a preset.
 
 ### `secret "storage-config" not found`

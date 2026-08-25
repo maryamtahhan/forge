@@ -58,12 +58,16 @@ def do_test(
 
                 with env.NextArtifactDir(label):
                     try:
-                        _run_test(
+                        ret = _run_test(
                             model_key=model_key,
                             workload_keys=[workload_key],
                             namespace=namespace,
                             deploy_cfg_overrides={"cpu_request": cpu_request},
                         )
+                        if ret != 0:
+                            failed += 1
+                            if not continue_on_error:
+                                return 1
                     except Exception:
                         failed += 1
                         logger.error("Cell %s failed", label, exc_info=True)

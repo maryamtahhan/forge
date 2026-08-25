@@ -51,10 +51,9 @@ def get_serving_image(accelerator: str, engine: str | None = None) -> str:
     engine = engine or get_engine()
     if accelerator == "cpu":
         flavor = get_cpu_flavor()
-        try:
-            return config.project.get_config(f"rhaiis.images.cpu-{flavor}")
-        except Exception:
-            return config.project.get_config("rhaiis.images.cpu")
+        if flavor == "vanilla":
+            return config.project.get_config("rhaiis.images.cpu-vanilla")
+        return config.project.get_config("rhaiis.images.cpu")
     try:
         return config.project.get_config(f"rhaiis.engines.{engine}.images.{accelerator}")
     except Exception:

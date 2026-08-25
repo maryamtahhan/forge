@@ -81,6 +81,26 @@ EOF
 > if the cluster has no default StorageClass. 50 Gi is enough for TinyLlama
 > and Qwen3-0.6B; use 200 Gi for Llama 3.1 8B.
 
+Before running `cpu-chat-baseline` or a Fournos 8B job, resize or recreate the
+PVC at 200 Gi:
+
+```bash
+# Recreate at 200 Gi (delete the old PVC only if no pod is mounted)
+oc delete pvc model-pvc -n forge-rhaiis
+oc create -n forge-rhaiis -f - <<'EOF'
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: model-pvc
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 200Gi
+EOF
+```
+
 ### 6. Set artifact directory
 
 ```bash

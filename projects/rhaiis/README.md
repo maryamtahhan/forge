@@ -243,7 +243,10 @@ spec:
 ### FournosJob YAML (CPU)
 
 CPU jobs require no `hardware:` section — Fournos schedules them on CPU-only nodes.
-Use the `cpu` preset (rhaiis-flavored vLLM) or `cpu-vanilla` (upstream vLLM).
+Use the `cpu-chat-baseline` preset (RHAIIS flavor, llama31-8b-w8a8-cpu, KV=24 GiB) or
+`vanilla-cpu-chat-baseline` for the upstream vLLM image. The preset sets model,
+workload, flavor, 64 GiB memory, and `VLLM_CPU_KVCACHE_SPACE=24`; the overrides
+below raise CPU cores and memory for a production-sized node.
 
 ```yaml
 apiVersion: fournos.dev/v1
@@ -261,12 +264,11 @@ spec:
   executionEngine:
     forge:
       project: rhaiis
-      args: [cpu]
+      args: [cpu-chat-baseline]
       configOverrides:
-        tests.rhaiis.model_key: llama31-8b-w8a8-cpu
         tests.rhaiis.version: "vLLM-cpu-0.1.0"
-        tests.rhaiis.workload_keys: ["cpu-chat-baseline"]
-        rhaiis.engines.vllm.images.cpu: <cpu-vllm-image>
+        rhaiis.images.cpu: <cpu-vllm-image>        # override RHAIIS image (rhaiis flavor)
+        # rhaiis.images.cpu-vanilla: <image>       # use this key for vanilla flavor
         rhaiis.deploy.cpu_request: "32"
         rhaiis.deploy.memory_request: "128Gi"
         rhaiis.cluster_tag: "zeus-cpu"
@@ -292,12 +294,11 @@ Jobs can also be triggered via PR comments on `openshift-psap/forge`:
 CPU variant:
 
 ```
-/test fournos rhaiis cpu
+/test fournos rhaiis cpu-chat-baseline
 /pipeline forge-full
 /cluster zeus
-/var tests.rhaiis.model_key: llama31-8b-w8a8-cpu
 /var tests.rhaiis.version: vLLM-cpu-0.1.0
-/var tests.rhaiis.workload_keys: ["cpu-chat-baseline"]
+/var rhaiis.images.cpu: <cpu-vllm-image>
 ```
 
 Note: `/var` directives use `key: value` format (colon required).
@@ -319,6 +320,8 @@ Available configOverrides:
 | `rhaiis.engine` | Inference engine: `vllm` (default), `sglang`, `trtllm` |
 | `rhaiis.accelerator` | Accelerator type: `nvidia`, `amd`, or `cpu` |
 | `rhaiis.cpu_flavor` | CPU image variant: `rhaiis` (patched) or `vanilla` (upstream) |
+| `rhaiis.images.cpu` | Override RHAIIS CPU image (used when `cpu_flavor=rhaiis`) |
+| `rhaiis.images.cpu-vanilla` | Override vanilla CPU image (used when `cpu_flavor=vanilla`) |
 | `rhaiis.namespace` | Kubernetes namespace |
 | `rhaiis.cluster_tag` | Cluster identifier for dashboard grouping |
 | `rhaiis.deploy.image_pull_secrets` | List of image pull secret names |

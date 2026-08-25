@@ -172,9 +172,11 @@ def post_cleanup(ctx):
 @click.pass_context
 @ci_lib.safe_ci_entrypoint
 def preflight(ctx) -> int:
-    """Preflight check phase - Validate that the cluster if ready for testing."""
+    """Preflight check phase - Validate that the cluster is ready for testing."""
 
-    logger.warning("Nothing so far for the preflight check")
+    if runtime_config.get_accelerator() == "cpu":
+        from projects.rhaiis.toolbox.diagnose_cpu_cluster.main import run as diagnose_cpu_cluster
+        return diagnose_cpu_cluster()
 
     return 0
 

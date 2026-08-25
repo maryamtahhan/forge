@@ -285,6 +285,10 @@ def concurrent_load(
     dry_run: bool,
 ):
     """Run the concurrent load matrix: models x cpu_requests x workloads."""
+    # Snapshot global defaults before presets so we can detect preset overrides.
+    _pre_model = runtime_config.get_test_model_key()
+    _pre_workload = runtime_config.get_test_workload_key()
+
     for name in preset:
         config.project.apply_preset(name)
 
@@ -304,21 +308,19 @@ def concurrent_load(
 
     if models:
         model_keys = [x.strip() for x in models.split(",") if x.strip()]
+    elif runtime_config.get_test_model_key() != _pre_model:
+        model_keys = [runtime_config.get_test_model_key()]
     else:
-        try:
-            model_keys = [runtime_config.get_test_model_key()]
-        except Exception:
-            model_keys = DEFAULT_MODEL_KEYS
+        model_keys = DEFAULT_MODEL_KEYS
 
     cpu_request_list = [x.strip() for x in cpu_requests.split(",") if x.strip()] if cpu_requests else DEFAULT_CPU_REQUESTS
 
     if workloads:
         workload_keys = [x.strip() for x in workloads.split(",") if x.strip()]
+    elif runtime_config.get_test_workload_key() != _pre_workload:
+        workload_keys = [runtime_config.get_test_workload_key()]
     else:
-        try:
-            workload_keys = [runtime_config.get_test_workload_key()]
-        except Exception:
-            workload_keys = DEFAULT_WORKLOAD_KEYS
+        workload_keys = DEFAULT_WORKLOAD_KEYS
     resolved_ns = namespace or runtime_config.get_namespace()
     resolved_flavor = runtime_config.get_cpu_flavor()
 

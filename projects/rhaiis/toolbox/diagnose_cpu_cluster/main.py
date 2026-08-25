@@ -52,13 +52,11 @@ def check_cpu_instruction_sets(args, context):
             "'grep -m1 flags /proc/cpuinfo 2>/dev/null'",
             check=False,
         )
-        flags = next(
-            (line for line in flags_result.stdout.splitlines() if line.startswith("flags")),
-            "",
-        )
-        avx2 = "YES" if " avx2 " in flags else "no"
-        avx512 = "YES" if " avx512f " in flags else "no"
-        amx = "YES" if " amx_tile " in flags else "no"
+        # Search full stdout — oc debug may prepend a banner before the grep output
+        stdout = flags_result.stdout
+        avx2 = "YES" if " avx2 " in stdout else "no"
+        avx512 = "YES" if " avx512f " in stdout else "no"
+        amx = "YES" if " amx_tile " in stdout else "no"
         print(f"  {node}: AVX2={avx2}  AVX-512={avx512}  AMX={amx}")
     return f"CPU instruction sets checked for {len(nodes)} node(s)"
 
@@ -89,8 +87,12 @@ def check_cpu_manager_policy(args, context):
             check=False,
         )
         try:
-            policy = json.loads(state_result.stdout).get("policyName", "unknown")
-        except (json.JSONDecodeError, AttributeError):
+            # oc debug may prepend a banner; extract the first JSON object
+            stdout = state_result.stdout
+            start = stdout.find("{")
+            end = stdout.rfind("}") + 1
+            policy = json.loads(stdout[start:end]).get("policyName", "unknown") if start >= 0 and end > start else "unknown"
+        except (json.JSONDecodeError, AttributeError, ValueError):
             policy = "unknown"
         print(f"  {node}: cpuManagerPolicy={policy}")
     return f"CPU manager policy checked for {len(nodes)} node(s)"
@@ -115,6 +117,7 @@ def check_kserve_crds(args, context):
 
 @task
 def show_cpu_images(args, context):
+    # Tags must match rhaiis.images.cpu and rhaiis.images.cpu-vanilla in config.d/rhaiis.yaml
     print("  RHAIIS:  registry.redhat.io/rhaii/vllm-cpu-rhel9:3.5.0-1786546771")
     print("  Vanilla: docker.io/vllm/vllm-openai-cpu:v0.25.1")
     print("  (pull test requires image pull secret for RHAIIS image)")

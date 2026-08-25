@@ -14,11 +14,11 @@ oc login --token=<token> --server=<server> --insecure-skip-tls-verify=true
 
 ### 2. Diagnose the cluster
 
-Run the diagnostic script to verify CPU instruction sets, KServe availability,
+Run the diagnostic toolbox to verify CPU instruction sets, KServe availability,
 and image pull capability before committing to a namespace:
 
 ```bash
-bash projects/rhaiis/scripts/diagnose_cpu_cluster.sh
+./bin/run_toolbox rhaiis diagnose_cpu_cluster
 ```
 
 The script checks:

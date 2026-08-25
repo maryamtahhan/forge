@@ -10,7 +10,7 @@ gpu_types:
 
 # CPU image fallback (not engine-scoped since vLLM CPU is a distinct build)
 images:
-  cpu: registry.redhat.io/rhaii/vllm-cpu-rhel9:3.4.0
+  cpu: registry.redhat.io/rhaii/vllm-cpu-rhel9:3.5.0-1786546771
   cpu-vanilla: docker.io/vllm/vllm-openai-cpu:v0.25.1
 
 engine: vllm

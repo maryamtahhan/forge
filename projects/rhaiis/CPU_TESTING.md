@@ -219,7 +219,7 @@ python -m projects.rhaiis.orchestration.cli concurrent-load \
 | Flavor | Image |
 |---|---|
 | `vanilla` | `docker.io/vllm/vllm-openai-cpu:v0.25.1` |
-| `rhaiis` | `registry.redhat.io/rhaii/vllm-cpu-rhel9:3.4.0` |
+| `rhaiis` | `registry.redhat.io/rhaii/vllm-cpu-rhel9:3.5.0-1786546771` |
 
 ## Presets
 

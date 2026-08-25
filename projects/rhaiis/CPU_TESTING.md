@@ -45,7 +45,9 @@ oc create secret generic storage-config \
   -n forge-rhaiis
 ```
 
-RHAIIS image pull secret (only needed when using `--cpu-flavor rhaiis`):
+RHAIIS image pull secret (only needed when using the `cpu` or `cpu-smoke`
+presets, i.e. `--cpu-flavor rhaiis` — not required for `cpu-vanilla` /
+`vanilla-cpu-smoke`):
 
 ```bash
 oc create secret docker-registry rhaiis-pull-secret \
@@ -54,7 +56,32 @@ oc create secret docker-registry rhaiis-pull-secret \
   -n forge-rhaiis
 ```
 
-### 5. Set artifact directory
+### 5. Create the model cache PVC
+
+The default storage config uses `storage_source: hf` with `storage_pvc:
+model-pvc`. KServe mounts this PVC at `/mnt/models` so vLLM can persist the
+HuggingFace download cache across pod restarts. Create it once per namespace:
+
+```bash
+oc create -n forge-rhaiis -f - <<'EOF'
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: model-pvc
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 50Gi
+EOF
+```
+
+> **Tip**: check `oc get storageclass` first and add `storageClassName: <name>`
+> if the cluster has no default StorageClass. 50 Gi is enough for TinyLlama
+> and Qwen3-0.6B; use 200 Gi for Llama 3.1 8B.
+
+### 6. Set artifact directory
 
 ```bash
 export ARTIFACT_DIR=/tmp/rhaiis-artifacts
@@ -63,49 +90,60 @@ mkdir -p $ARTIFACT_DIR
 
 ## Single-Run Tests
 
-### Dry-run (no cluster required)
+### Step 5: Smoke test
+
+After cluster setup (steps 1–6 above), run a smoke test to confirm the stack
+is working end-to-end before committing to a longer benchmark.
+
+#### Dry-run (no cluster required)
 
 ```bash
-# Vanilla upstream vLLM CPU
+# Vanilla — confirm config with no cluster
 python -m projects.rhaiis.orchestration.cli test \
-  --accelerator cpu --cpu-flavor vanilla \
-  --model tinyllama-cpu --workload cpu-smoke \
+  --preset vanilla-cpu-smoke \
   --namespace forge-rhaiis \
   --dry-run
 
-# RHAIIS CPU
+# RHAIIS — confirm config with no cluster
 python -m projects.rhaiis.orchestration.cli test \
-  --accelerator cpu --cpu-flavor rhaiis \
-  --model tinyllama-cpu --workload cpu-smoke \
+  --preset cpu-smoke \
   --namespace forge-rhaiis \
+  --image-pull-secret rhaiis-pull-secret \
   --dry-run
 ```
 
-### Smoke test (cluster required)
+#### Live smoke test (cluster required)
 
 ```bash
 # Vanilla (no image pull secret needed)
 python -m projects.rhaiis.orchestration.cli test \
-  --accelerator cpu --cpu-flavor vanilla \
-  --model tinyllama-cpu --workload cpu-smoke \
+  --preset vanilla-cpu-smoke \
   --namespace forge-rhaiis
 
-# RHAIIS
+# RHAIIS (requires registry.redhat.io pull secret)
 python -m projects.rhaiis.orchestration.cli test \
-  --accelerator cpu --cpu-flavor rhaiis \
-  --model tinyllama-cpu --workload cpu-smoke \
+  --preset cpu-smoke \
   --namespace forge-rhaiis \
   --image-pull-secret rhaiis-pull-secret
 ```
 
+> **Note**: on first run vLLM downloads the model from HuggingFace into the
+> PVC (`/mnt/models`). TinyLlama is ~1 GB; allow 5-10 minutes. Subsequent
+> runs reuse the cached weights.
+
 ### Baseline workloads
 
 ```bash
+# Vanilla
 python -m projects.rhaiis.orchestration.cli test \
-  --accelerator cpu --cpu-flavor vanilla \
-  --model llama31-8b-w8a8-cpu \
-  --workload cpu-chat-baseline \
+  --preset vanilla-cpu-chat-baseline \
   --namespace forge-rhaiis
+
+# RHAIIS
+python -m projects.rhaiis.orchestration.cli test \
+  --preset cpu-chat-baseline \
+  --namespace forge-rhaiis \
+  --image-pull-secret rhaiis-pull-secret
 ```
 
 ## Concurrent Load Matrix
@@ -113,28 +151,36 @@ python -m projects.rhaiis.orchestration.cli test \
 The concurrent load test sweeps `models × cpu_requests × workloads`, matching
 the format-results `concurrent-load` suite.
 
-### Run the matrix
+### Step 6: Run the matrix
+
+#### Vanilla (recommended starting point)
 
 ```bash
 python -m projects.rhaiis.orchestration.cli concurrent-load \
-  --models tinyllama-cpu,qwen3-0-6b-cpu \
+  --preset cpu-vanilla \
+  --models tinyllama-cpu \
   --cpu-requests 8,16 \
   --workloads cpu-chat-baseline,cpu-rag-baseline \
   --namespace forge-rhaiis \
   --continue-on-error
 ```
 
-`--cpu-flavor` defaults to the config value (`vanilla`) when omitted. For RHAIIS:
+#### RHAIIS
 
 ```bash
 python -m projects.rhaiis.orchestration.cli concurrent-load \
-  --cpu-flavor rhaiis \
-  --image-pull-secret rhaiis-pull-secret \
+  --preset cpu \
   --models llama31-8b-w8a8-cpu \
   --cpu-requests 8,16 \
   --workloads cpu-chat-baseline,cpu-code-baseline \
-  --namespace forge-rhaiis
+  --namespace forge-rhaiis \
+  --image-pull-secret rhaiis-pull-secret \
+  --continue-on-error
 ```
+
+`--cpu-flavor` defaults to the config value (`vanilla`) when omitted; passing
+`--preset cpu` or `--preset cpu-vanilla` sets the flavor without an explicit
+`--cpu-flavor` flag.
 
 ### Matrix dimensions
 

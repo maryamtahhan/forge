@@ -164,6 +164,8 @@ def _apply_cli_overrides(
         config.project.set_config("rhaiis.accelerator", accelerator)
     if cpu_flavor:
         config.project.set_config("rhaiis.cpu_flavor", cpu_flavor)
+        if not accelerator:
+            config.project.set_config("rhaiis.accelerator", "cpu")
     if engine:
         config.project.set_config("rhaiis.engine", engine)
     resolved_engine = runtime_config.get_engine()
@@ -288,6 +290,7 @@ def concurrent_load(
 
     if cpu_flavor:
         config.project.set_config("rhaiis.cpu_flavor", cpu_flavor)
+        config.project.set_config("rhaiis.accelerator", "cpu")
     if image_pull_secret:
         config.project.set_config("rhaiis.deploy.image_pull_secrets", [image_pull_secret])
     if service_account_name:
@@ -299,9 +302,23 @@ def concurrent_load(
         DEFAULT_WORKLOAD_KEYS,
     )
 
-    model_keys = [x.strip() for x in models.split(",") if x.strip()] if models else DEFAULT_MODEL_KEYS
+    if models:
+        model_keys = [x.strip() for x in models.split(",") if x.strip()]
+    else:
+        try:
+            model_keys = [runtime_config.get_test_model_key()]
+        except Exception:
+            model_keys = DEFAULT_MODEL_KEYS
+
     cpu_request_list = [x.strip() for x in cpu_requests.split(",") if x.strip()] if cpu_requests else DEFAULT_CPU_REQUESTS
-    workload_keys = [x.strip() for x in workloads.split(",") if x.strip()] if workloads else DEFAULT_WORKLOAD_KEYS
+
+    if workloads:
+        workload_keys = [x.strip() for x in workloads.split(",") if x.strip()]
+    else:
+        try:
+            workload_keys = [runtime_config.get_test_workload_key()]
+        except Exception:
+            workload_keys = DEFAULT_WORKLOAD_KEYS
     resolved_ns = namespace or runtime_config.get_namespace()
     resolved_flavor = runtime_config.get_cpu_flavor()
 

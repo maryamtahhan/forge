@@ -202,9 +202,10 @@ python -m projects.rhaiis.orchestration.cli concurrent-load \
 #### RHAIIS
 
 ```bash
+# cpu-chat-baseline preset pins model (llama31-8b-w8a8-cpu), flavor (rhaiis),
+# memory (64 Gi), and VLLM_CPU_KVCACHE_SPACE=24
 python -m projects.rhaiis.orchestration.cli concurrent-load \
-  --preset cpu \
-  --models llama31-8b-w8a8-cpu \
+  --preset cpu-chat-baseline \
   --cpu-requests 8,16 \
   --workloads cpu-chat-baseline,cpu-code-baseline \
   --namespace forge-rhaiis \
@@ -213,8 +214,8 @@ python -m projects.rhaiis.orchestration.cli concurrent-load \
 ```
 
 `--cpu-flavor` defaults to the config value (`vanilla`) when omitted; passing
-`--preset cpu` or `--preset cpu-vanilla` sets the flavor without an explicit
-`--cpu-flavor` flag.
+`--preset cpu-chat-baseline` or `--preset vanilla-cpu-chat-baseline` sets the
+flavor (and KV=24) without explicit `--cpu-flavor` or `--models` flags.
 
 ### Matrix dimensions
 

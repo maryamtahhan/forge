@@ -10,6 +10,14 @@ LABEL_CPU_BENCHMARK = "rhaiis.io/cpu-benchmark"
 
 DEFAULT_BENCHMARK_NODE_SELECTOR = {LABEL_CPU_BENCHMARK: "true"}
 
+MANAGED_CPU_LABELS = (
+    LABEL_CPU_VLLM_CAPABLE,
+    LABEL_CPU_AVX512,
+    LABEL_CPU_AMX,
+    LABEL_CPU_MANAGER_STATIC,
+    LABEL_CPU_BENCHMARK,
+)
+
 
 def parse_cpu_flags(cpuinfo_line: str) -> dict[str, bool]:
     """Parse /proc/cpuinfo flags line into feature booleans."""
@@ -60,3 +68,8 @@ def compute_node_labels(
     if avx2 and allocatable_cpu_cores >= min_benchmark_cpu:
         labels[LABEL_CPU_BENCHMARK] = "true"
     return labels
+
+
+def find_managed_labels_on_node(node_labels: dict[str, str]) -> list[str]:
+    """Return managed rhaiis.io CPU label keys present on a node."""
+    return [key for key in MANAGED_CPU_LABELS if key in node_labels]

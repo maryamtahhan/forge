@@ -13,6 +13,7 @@ from projects.rhaiis.toolbox.diagnose_cpu_cluster.node_labels import (
     LABEL_CPU_MANAGER_STATIC,
     LABEL_CPU_VLLM_CAPABLE,
     compute_node_labels,
+    find_managed_labels_on_node,
     is_worker_node,
     parse_cpu_cores,
     parse_cpu_flags,
@@ -69,6 +70,19 @@ def test_compute_node_labels() -> None:
     print("  compute_node_labels (empty)  OK")
 
 
+def test_find_managed_labels_on_node() -> None:
+    present = find_managed_labels_on_node(
+        {
+            LABEL_CPU_BENCHMARK: "true",
+            LABEL_CPU_AVX512: "true",
+            "kubernetes.io/hostname": "worker-1",
+        }
+    )
+    assert present == [LABEL_CPU_AVX512, LABEL_CPU_BENCHMARK]
+    assert find_managed_labels_on_node({"kubernetes.io/hostname": "worker-1"}) == []
+    print("  find_managed_labels_on_node  OK")
+
+
 def test_build_inferenceservice_node_selector() -> None:
     manifest = build_inferenceservice(
         deployment_name="tinyllama",
@@ -98,6 +112,7 @@ if __name__ == "__main__":
         test_parse_cpu_cores,
         test_is_worker_node,
         test_compute_node_labels,
+        test_find_managed_labels_on_node,
         test_build_inferenceservice_node_selector,
     ]
     for test in tests:

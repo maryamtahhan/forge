@@ -4,7 +4,8 @@
 Run before deploying to verify node resources, CPU instruction sets,
 NUMA topology, CPU manager policy, and KServe CRD availability.
 
-Optionally apply rhaiis.io/* node labels for CPU scheduling (see --apply-labels).
+Optionally apply or remove rhaiis.io/* node labels for CPU scheduling
+(see --apply-labels and --remove-labels).
 """
 
 from __future__ import annotations
@@ -22,6 +23,7 @@ from projects.rhaiis.toolbox.diagnose_cpu_cluster.node_labels import (
     DEFAULT_BENCHMARK_NODE_SELECTOR,
     LABEL_CPU_BENCHMARK,
     compute_node_labels,
+    find_managed_labels_on_node,
     is_worker_node,
     parse_cpu_cores,
     parse_cpu_flags,
@@ -32,6 +34,7 @@ from projects.rhaiis.toolbox.diagnose_cpu_cluster.node_labels import (
 def run(
     *,
     apply_labels: bool = False,
+    remove_labels: bool = False,
     dry_run: bool = False,
     min_benchmark_cpu: float = 8,
     workers_only: bool = True,
@@ -40,11 +43,19 @@ def run(
 
     Args:
         apply_labels: When True, apply rhaiis.io/* labels to worker nodes.
-        dry_run: With apply_labels, print oc label commands without running them.
+        remove_labels: When True, remove rhaiis.io/* CPU labels from worker nodes.
+        dry_run: With apply_labels or remove_labels, print oc commands without running them.
         min_benchmark_cpu: Minimum allocatable CPU cores for cpu-benchmark label.
         workers_only: Skip control-plane nodes for checks and labeling.
     """
+    if apply_labels and remove_labels:
+        raise ValueError("Cannot use --apply-labels and --remove-labels together")
     return execute_tasks(locals())
+
+
+def _skip_diagnose_checks(args) -> bool:
+    """Skip slow oc debug checks when only removing labels."""
+    return args.remove_labels and not args.apply_labels
 
 
 @task
@@ -91,6 +102,9 @@ def show_node_resources(args, context):
 
 @task
 def check_cpu_instruction_sets(args, context):
+    if _skip_diagnose_checks(args):
+        context.node_features = {}
+        return "CPU instruction set checks skipped (remove-labels only)"
     context.node_features: dict[str, dict] = {}
     for node in context.nodes:
         flags_result = shell.run(
@@ -114,6 +128,8 @@ def check_cpu_instruction_sets(args, context):
 
 @task
 def check_numa_topology(args, context):
+    if _skip_diagnose_checks(args):
+        return "NUMA topology checks skipped (remove-labels only)"
     for node in context.nodes:
         numa_result = shell.run(
             f"oc debug node/{node} -- chroot /host numactl --hardware",
@@ -129,6 +145,8 @@ def check_numa_topology(args, context):
 
 @task
 def check_cpu_manager_policy(args, context):
+    if _skip_diagnose_checks(args):
+        return "CPU manager policy checks skipped (remove-labels only)"
     for node in context.nodes:
         state_result = shell.run(
             f"oc debug node/{node} -- chroot /host "
@@ -202,7 +220,42 @@ def apply_node_labels(args, context):
 
 
 @task
+def remove_node_labels(args, context):
+    if not args.remove_labels:
+        print("  (skipped — pass --remove-labels to clear rhaiis.io/* node labels)")
+        return "Node label removal skipped"
+
+    if not context.nodes:
+        raise RuntimeError("No worker nodes found to clean labels from")
+
+    removed_nodes = 0
+    for node in context.nodes:
+        keys = find_managed_labels_on_node(context.node_labels.get(node, {}))
+        if not keys:
+            print(f"  {node}: no rhaiis.io CPU labels present")
+            continue
+        remove_args = [f"{key}-" for key in sorted(keys)]
+        cmd = f"oc label node {node} {' '.join(remove_args)}"
+        if args.dry_run:
+            print(f"  [dry-run] {cmd}")
+            removed_nodes += 1
+            continue
+        result = oc("label", "node", node, *remove_args, check=False)
+        if result.returncode != 0:
+            raise RuntimeError(
+                f"Failed to remove labels from node {node}: {result.stderr or result.stdout}"
+            )
+        print(f"  {node}: removed {', '.join(sorted(keys))}")
+        removed_nodes += 1
+
+    mode = "dry-run" if args.dry_run else "removed"
+    return f"Node labels {mode} on {removed_nodes}/{len(context.nodes)} worker node(s)"
+
+
+@task
 def check_kserve_crds(args, context):
+    if _skip_diagnose_checks(args):
+        return "KServe CRD checks skipped (remove-labels only)"
     crds = [
         "inferenceservices.serving.kserve.io",
         "servingruntimes.serving.kserve.io",
@@ -220,6 +273,8 @@ def check_kserve_crds(args, context):
 
 @task
 def show_cpu_images(args, context):
+    if _skip_diagnose_checks(args):
+        return "CPU image references skipped (remove-labels only)"
     print("  RHAIIS:  registry.redhat.io/rhaii/vllm-cpu-rhel9:3.5.0-1786546771")
     print("  Vanilla: docker.io/vllm/vllm-openai-cpu:v0.25.1")
     print("  (pull test requires image pull secret for RHAIIS image)")

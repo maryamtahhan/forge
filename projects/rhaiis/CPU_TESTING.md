@@ -41,6 +41,10 @@ diagnostic output:
 
 # Apply rhaiis.io/* labels to worker nodes
 ./bin/run_toolbox rhaiis diagnose_cpu_cluster --apply-labels
+
+# Remove rhaiis.io/* CPU labels (fast — skips oc debug checks)
+./bin/run_toolbox rhaiis diagnose_cpu_cluster --remove-labels --dry-run
+./bin/run_toolbox rhaiis diagnose_cpu_cluster --remove-labels
 ```
 
 Labels written:

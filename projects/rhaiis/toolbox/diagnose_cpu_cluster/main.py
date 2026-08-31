@@ -3,6 +3,8 @@
 
 Run before deploying to verify node resources, CPU instruction sets,
 NUMA topology, CPU manager policy, and KServe CRD availability.
+
+Optionally apply rhaiis.io/* node labels for CPU scheduling (see --apply-labels).
 """
 
 from __future__ import annotations
@@ -15,56 +17,104 @@ from projects.core.dsl import (
     shell,
     task,
 )
-from projects.core.dsl.utils.k8s import oc_resource_exists
+from projects.core.dsl.utils.k8s import oc, oc_resource_exists
+from projects.rhaiis.toolbox.diagnose_cpu_cluster.node_labels import (
+    DEFAULT_BENCHMARK_NODE_SELECTOR,
+    LABEL_CPU_BENCHMARK,
+    compute_node_labels,
+    is_worker_node,
+    parse_cpu_cores,
+    parse_cpu_flags,
+)
 
 
 @entrypoint
-def run():
-    """Diagnose OpenShift cluster suitability for CPU vLLM benchmarking."""
+def run(
+    *,
+    apply_labels: bool = False,
+    dry_run: bool = False,
+    min_benchmark_cpu: float = 8,
+    workers_only: bool = True,
+):
+    """Diagnose OpenShift cluster suitability for CPU vLLM benchmarking.
+
+    Args:
+        apply_labels: When True, apply rhaiis.io/* labels to worker nodes.
+        dry_run: With apply_labels, print oc label commands without running them.
+        min_benchmark_cpu: Minimum allocatable CPU cores for cpu-benchmark label.
+        workers_only: Skip control-plane nodes for checks and labeling.
+    """
     return execute_tasks(locals())
 
 
 @task
 def show_node_resources(args, context):
-    result = shell.run(
-        "oc get nodes -o custom-columns="
-        "NAME:.metadata.name,"
-        "CPU:.status.allocatable.cpu,"
-        "MEM:.status.allocatable.memory,"
-        "STATUS:.status.conditions[-1].type",
-        check=False,
-    )
-    nodes_result = shell.run(
-        "oc get nodes -o jsonpath='{.items[*].metadata.name}'",
-        check=False,
-    )
-    context.nodes = nodes_result.stdout.strip().strip("'").split()
-    print(result.stdout)
-    return f"Node resources listed ({len(context.nodes)} node(s))"
+    nodes_result = shell.run("oc get nodes -o json", check=False)
+    context.nodes = []
+    context.node_allocatable_cpu: dict[str, float] = {}
+    context.node_labels: dict[str, dict[str, str]] = {}
+
+    if nodes_result.returncode != 0:
+        print(nodes_result.stderr or nodes_result.stdout)
+        raise RuntimeError("Failed to list cluster nodes")
+
+    payload = json.loads(nodes_result.stdout)
+    rows = []
+    for item in payload.get("items", []):
+        name = item["metadata"]["name"]
+        labels = item.get("metadata", {}).get("labels", {})
+        if args.workers_only and not is_worker_node(labels):
+            continue
+
+        status = item.get("status", {})
+        alloc = status.get("allocatable", {})
+        cpu = alloc.get("cpu", "?")
+        mem = alloc.get("memory", "?")
+        ready = next(
+            (
+                c.get("type")
+                for c in status.get("conditions", [])
+                if c.get("type") == "Ready" and c.get("status") == "True"
+            ),
+            "NotReady",
+        )
+        rows.append(f"{name}\t{cpu}\t{mem}\t{ready}")
+        context.nodes.append(name)
+        context.node_labels[name] = labels
+        if cpu != "?":
+            context.node_allocatable_cpu[name] = parse_cpu_cores(cpu)
+
+    print("NAME\tCPU\tMEM\tSTATUS")
+    print("\n".join(rows))
+    return f"Node resources listed ({len(context.nodes)} worker node(s))"
 
 
 @task
 def check_cpu_instruction_sets(args, context):
-    nodes = context.nodes
-    for node in nodes:
+    context.node_features: dict[str, dict] = {}
+    for node in context.nodes:
         flags_result = shell.run(
             f"oc debug node/{node} -- chroot /host sh -c "
             "'grep -m1 flags /proc/cpuinfo 2>/dev/null'",
             check=False,
         )
-        # Search full stdout — oc debug may prepend a banner before the grep output
         stdout = flags_result.stdout
-        avx2 = "YES" if " avx2 " in stdout else "no"
-        avx512 = "YES" if " avx512f " in stdout else "no"
-        amx = "YES" if " amx_tile " in stdout else "no"
+        flags_line = next(
+            (line for line in stdout.splitlines() if "flags" in line),
+            "",
+        )
+        features = parse_cpu_flags(flags_line)
+        context.node_features[node] = features
+        avx2 = "YES" if features["avx2"] else "no"
+        avx512 = "YES" if features["avx512"] else "no"
+        amx = "YES" if features["amx"] else "no"
         print(f"  {node}: AVX2={avx2}  AVX-512={avx512}  AMX={amx}")
-    return f"CPU instruction sets checked for {len(nodes)} node(s)"
+    return f"CPU instruction sets checked for {len(context.nodes)} node(s)"
 
 
 @task
 def check_numa_topology(args, context):
-    nodes = context.nodes
-    for node in nodes:
+    for node in context.nodes:
         numa_result = shell.run(
             f"oc debug node/{node} -- chroot /host numactl --hardware",
             check=False,
@@ -74,28 +124,81 @@ def check_numa_topology(args, context):
             "unknown",
         )
         print(f"  {node}: {available_line}")
-    return f"NUMA topology checked for {len(nodes)} node(s)"
+    return f"NUMA topology checked for {len(context.nodes)} node(s)"
 
 
 @task
 def check_cpu_manager_policy(args, context):
-    nodes = context.nodes
-    for node in nodes:
+    for node in context.nodes:
         state_result = shell.run(
             f"oc debug node/{node} -- chroot /host "
             "cat /var/lib/kubelet/cpu_manager_state",
             check=False,
         )
+        policy = "unknown"
         try:
-            # oc debug may prepend a banner; extract the first JSON object
             stdout = state_result.stdout
             start = stdout.find("{")
             end = stdout.rfind("}") + 1
-            policy = json.loads(stdout[start:end]).get("policyName", "unknown") if start >= 0 and end > start else "unknown"
+            if start >= 0 and end > start:
+                policy = json.loads(stdout[start:end]).get("policyName", "unknown")
         except (json.JSONDecodeError, AttributeError, ValueError):
             policy = "unknown"
+        static = policy == "static"
+        context.node_features.setdefault(node, {})["cpu_manager_static"] = static
         print(f"  {node}: cpuManagerPolicy={policy}")
-    return f"CPU manager policy checked for {len(nodes)} node(s)"
+    return f"CPU manager policy checked for {len(context.nodes)} node(s)"
+
+
+@task
+def apply_node_labels(args, context):
+    if not args.apply_labels:
+        print("  (skipped — pass --apply-labels to write rhaiis.io/* node labels)")
+        return "Node labeling skipped (diagnose-only mode)"
+
+    planned: list[tuple[str, dict[str, str]]] = []
+    for node in context.nodes:
+        features = context.node_features.get(node, {})
+        labels = compute_node_labels(
+            avx2=features.get("avx2", False),
+            avx512=features.get("avx512", False),
+            amx=features.get("amx", False),
+            cpu_manager_static=features.get("cpu_manager_static", False),
+            allocatable_cpu_cores=context.node_allocatable_cpu.get(node, 0),
+            min_benchmark_cpu=args.min_benchmark_cpu,
+        )
+        planned.append((node, labels))
+
+    if not planned:
+        raise RuntimeError("No worker nodes found to label")
+
+    for node, labels in planned:
+        if not labels:
+            print(f"  {node}: no rhaiis labels (missing AVX2 or insufficient CPU)")
+            continue
+        label_args = " ".join(f"{key}={value}" for key, value in sorted(labels.items()))
+        cmd = f"oc label node {node} {label_args} --overwrite"
+        if args.dry_run:
+            print(f"  [dry-run] {cmd}")
+            continue
+        result = oc("label", "node", node, *[
+            f"{key}={value}" for key, value in sorted(labels.items())
+        ], "--overwrite", check=False)
+        if result.returncode != 0:
+            raise RuntimeError(
+                f"Failed to label node {node}: {result.stderr or result.stdout}"
+            )
+        print(f"  {node}: {', '.join(sorted(labels.keys()))}")
+
+    mode = "dry-run" if args.dry_run else "applied"
+    benchmark_nodes = sum(
+        1 for _, labels in planned if labels.get(LABEL_CPU_BENCHMARK) == "true"
+    )
+    print(
+        f"\n  Benchmark selector {DEFAULT_BENCHMARK_NODE_SELECTOR} matches "
+        f"{benchmark_nodes}/{len(planned)} worker node(s)"
+    )
+    return f"Node labels {mode} on {len(planned)} worker node(s)"
 
 
 @task
@@ -117,10 +220,13 @@ def check_kserve_crds(args, context):
 
 @task
 def show_cpu_images(args, context):
-    # Tags must match rhaiis.images.cpu and rhaiis.images.cpu-vanilla in config.d/rhaiis.yaml
     print("  RHAIIS:  registry.redhat.io/rhaii/vllm-cpu-rhel9:3.5.0-1786546771")
     print("  Vanilla: docker.io/vllm/vllm-openai-cpu:v0.25.1")
     print("  (pull test requires image pull secret for RHAIIS image)")
+    print(
+        f"  Deploy nodeSelector default for CPU presets: "
+        f"{DEFAULT_BENCHMARK_NODE_SELECTOR}"
+    )
     return "vLLM CPU image references listed"
 
 

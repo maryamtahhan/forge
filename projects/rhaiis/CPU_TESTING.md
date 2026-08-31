@@ -28,6 +28,42 @@ The toolbox checks:
 - CPU Manager policy (static = dedicated CPUs; none = time-sliced)
 - KServe CRD installation
 
+#### Label worker nodes for CPU scheduling (one-time per cluster)
+
+CPU presets set `rhaiis.deploy.node_selector` to
+`rhaiis.io/cpu-benchmark: "true"` so InferenceService pods land on nodes
+with AVX2 and enough allocatable CPU. Apply labels once after reviewing the
+diagnostic output:
+
+```bash
+# Preview label commands (no cluster changes)
+./bin/run_toolbox rhaiis diagnose_cpu_cluster --apply-labels --dry-run
+
+# Apply rhaiis.io/* labels to worker nodes
+./bin/run_toolbox rhaiis diagnose_cpu_cluster --apply-labels
+```
+
+Labels written:
+
+| Label | Meaning |
+|-------|---------|
+| `rhaiis.io/cpu-vllm-capable=true` | AVX2 present (minimum for vLLM CPU) |
+| `rhaiis.io/cpu-avx512=true` | AVX-512 present |
+| `rhaiis.io/cpu-amx=true` | Intel AMX present |
+| `rhaiis.io/cpu-manager-static=true` | kubelet CPU manager policy is `static` |
+| `rhaiis.io/cpu-benchmark=true` | AVX2 + allocatable CPU ≥ 8 cores (composite) |
+
+CI preflight runs diagnose-only (no labeling) so shared clusters are not
+modified automatically. Override the benchmark threshold with
+`--min-benchmark-cpu 16` if your smoke preset requests 16 vCPU.
+
+To disable scheduling constraints for a one-off test, clear the selector in
+config or override at deploy time:
+
+```yaml
+rhaiis.deploy.node_selector: {}
+```
+
 ### 3. Create the namespace
 
 ```bash

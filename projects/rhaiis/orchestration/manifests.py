@@ -95,6 +95,7 @@ def build_inferenceservice(
     model_id: str,
     service_account_name: str = "",
     labels: dict | None = None,
+    node_selector: dict[str, str] | None = None,
 ) -> dict[str, Any]:
     """Build a KServe InferenceService manifest dict."""
     annotations: dict[str, str] = {
@@ -153,6 +154,9 @@ def build_inferenceservice(
 
     if service_account_name:
         predictor["serviceAccountName"] = service_account_name
+
+    if node_selector:
+        predictor["nodeSelector"] = dict(node_selector)
 
     return {
         "apiVersion": "serving.kserve.io/v1beta1",

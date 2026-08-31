@@ -13,12 +13,16 @@ cpu:
   rhaiis.cpu_flavor: rhaiis
   rhaiis.deploy.cpu_request: "16"
   rhaiis.deploy.memory_request: "64Gi"
+  rhaiis.deploy.node_selector:
+    rhaiis.io/cpu-benchmark: "true"
 
 cpu-vanilla:
   rhaiis.accelerator: cpu
   rhaiis.cpu_flavor: vanilla
   rhaiis.deploy.cpu_request: "16"
   rhaiis.deploy.memory_request: "64Gi"
+  rhaiis.deploy.node_selector:
+    rhaiis.io/cpu-benchmark: "true"
 
 cpu-smoke:
   tests.rhaiis.model_key: tinyllama-cpu
@@ -27,6 +31,8 @@ cpu-smoke:
   rhaiis.cpu_flavor: rhaiis
   rhaiis.deploy.cpu_request: "16"
   rhaiis.deploy.memory_request: "64Gi"
+  rhaiis.deploy.node_selector:
+    rhaiis.io/cpu-benchmark: "true"
 
 vanilla-cpu-smoke:
   tests.rhaiis.model_key: tinyllama-cpu
@@ -35,6 +41,8 @@ vanilla-cpu-smoke:
   rhaiis.cpu_flavor: vanilla
   rhaiis.deploy.cpu_request: "16"
   rhaiis.deploy.memory_request: "64Gi"
+  rhaiis.deploy.node_selector:
+    rhaiis.io/cpu-benchmark: "true"
 
 cpu-chat-baseline:
   tests.rhaiis.model_key: llama31-8b-w8a8-cpu
@@ -43,6 +51,8 @@ cpu-chat-baseline:
   rhaiis.cpu_flavor: rhaiis
   rhaiis.deploy.cpu_request: "16"
   rhaiis.deploy.memory_request: "64Gi"
+  rhaiis.deploy.node_selector:
+    rhaiis.io/cpu-benchmark: "true"
   rhaiis.accelerator_env_vars.cpu.VLLM_CPU_KVCACHE_SPACE: "24"
 
 vanilla-cpu-chat-baseline:
@@ -52,6 +62,8 @@ vanilla-cpu-chat-baseline:
   rhaiis.cpu_flavor: vanilla
   rhaiis.deploy.cpu_request: "16"
   rhaiis.deploy.memory_request: "64Gi"
+  rhaiis.deploy.node_selector:
+    rhaiis.io/cpu-benchmark: "true"
   rhaiis.accelerator_env_vars.cpu.VLLM_CPU_KVCACHE_SPACE: "24"
 
 # ── Engine ───────────────────────────────────────────────────

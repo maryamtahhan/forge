@@ -68,6 +68,7 @@ deploy:
   service_account_name: ""
   ready_timeout: 3600
   health_check_timeout: 120
+  node_selector: {}
 
 vllm_args_cpu:
   trust-remote-code: true

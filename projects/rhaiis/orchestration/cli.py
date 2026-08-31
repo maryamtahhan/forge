@@ -236,6 +236,8 @@ def _print_dry_run(
     )
     click.echo(f"  Image pull secrets: {deploy_cfg.get('image_pull_secrets') or '(none)'}")
     click.echo(f"  Service account: {deploy_cfg.get('service_account_name') or '(none)'}")
+    node_selector = deploy_cfg.get("node_selector") or {}
+    click.echo(f"  Node selector: {node_selector or '(none)'}")
     click.echo(f"  Rates: {workload_cfg.get('rates', [1])}")
     click.echo(f"  Max seconds: {workload_cfg.get('max_seconds', 180)}")
     if accelerator == "cpu":

@@ -13,6 +13,7 @@ from projects.rhaiis.toolbox.diagnose_cpu_cluster.node_labels import (
     LABEL_CPU_MANAGER_STATIC,
     LABEL_CPU_VLLM_CAPABLE,
     compute_node_labels,
+    count_benchmark_eligible_nodes,
     find_managed_labels_on_node,
     is_worker_node,
     parse_cpu_cores,
@@ -39,6 +40,7 @@ def test_is_worker_node() -> None:
     assert is_worker_node({"node-role.kubernetes.io/worker": ""}) is True
     assert is_worker_node({"node-role.kubernetes.io/control-plane": ""}) is False
     assert is_worker_node({"node-role.kubernetes.io/master": ""}) is False
+    assert is_worker_node({"node-role.kubernetes.io/infra": ""}) is False
     print("  is_worker_node  OK")
 
 
@@ -68,6 +70,28 @@ def test_compute_node_labels() -> None:
     )
     assert sparse == {}
     print("  compute_node_labels (empty)  OK")
+
+
+def test_count_benchmark_eligible_nodes() -> None:
+    nodes = ["worker-1", "worker-2", "worker-3"]
+    node_labels = {
+        "worker-1": {LABEL_CPU_BENCHMARK: "true"},
+        "worker-2": {},
+        "worker-3": {},
+    }
+    node_features = {
+        "worker-2": {"avx2": True, "avx512": False, "amx": False, "cpu_manager_static": False},
+        "worker-3": {"avx2": False, "avx512": False, "amx": False, "cpu_manager_static": False},
+    }
+    node_allocatable_cpu = {"worker-1": 16.0, "worker-2": 16.0, "worker-3": 32.0}
+    assert count_benchmark_eligible_nodes(
+        nodes=nodes,
+        node_labels=node_labels,
+        node_features=node_features,
+        node_allocatable_cpu=node_allocatable_cpu,
+        min_benchmark_cpu=8,
+    ) == 2
+    print("  count_benchmark_eligible_nodes  OK")
 
 
 def test_find_managed_labels_on_node() -> None:
@@ -112,6 +136,7 @@ if __name__ == "__main__":
         test_parse_cpu_cores,
         test_is_worker_node,
         test_compute_node_labels,
+        test_count_benchmark_eligible_nodes,
         test_find_managed_labels_on_node,
         test_build_inferenceservice_node_selector,
     ]

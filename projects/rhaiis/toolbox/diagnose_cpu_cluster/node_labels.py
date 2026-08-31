@@ -74,3 +74,32 @@ def compute_node_labels(
 def find_managed_labels_on_node(node_labels: dict[str, str]) -> list[str]:
     """Return managed rhaiis.io CPU label keys present on a node."""
     return [key for key in MANAGED_CPU_LABELS if key in node_labels]
+
+
+def count_benchmark_eligible_nodes(
+    *,
+    nodes: list[str],
+    node_labels: dict[str, dict[str, str]],
+    node_features: dict[str, dict],
+    node_allocatable_cpu: dict[str, float],
+    min_benchmark_cpu: float = 8,
+) -> int:
+    """Count worker nodes that match or would receive the cpu-benchmark label."""
+    eligible = 0
+    for node in nodes:
+        labels = node_labels.get(node, {})
+        if labels.get(LABEL_CPU_BENCHMARK) == "true":
+            eligible += 1
+            continue
+        features = node_features.get(node, {})
+        computed = compute_node_labels(
+            avx2=features.get("avx2", False),
+            avx512=features.get("avx512", False),
+            amx=features.get("amx", False),
+            cpu_manager_static=features.get("cpu_manager_static", False),
+            allocatable_cpu_cores=node_allocatable_cpu.get(node, 0),
+            min_benchmark_cpu=min_benchmark_cpu,
+        )
+        if computed.get(LABEL_CPU_BENCHMARK) == "true":
+            eligible += 1
+    return eligible

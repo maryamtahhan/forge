@@ -23,11 +23,32 @@ from projects.rhaiis.toolbox.diagnose_cpu_cluster.node_labels import (
     DEFAULT_BENCHMARK_NODE_SELECTOR,
     LABEL_CPU_BENCHMARK,
     compute_node_labels,
+    count_benchmark_eligible_nodes,
     find_managed_labels_on_node,
     is_worker_node,
     parse_cpu_cores,
     parse_cpu_flags,
 )
+
+
+def _resolve_configured_cpu_images(
+    rhaiis_cpu_image: str | None,
+    vanilla_cpu_image: str | None,
+) -> tuple[str, str]:
+    """Load CPU serving images from project config when not passed explicitly."""
+    if rhaiis_cpu_image and vanilla_cpu_image:
+        return rhaiis_cpu_image, vanilla_cpu_image
+
+    from pathlib import Path
+
+    from projects.core.library import config, env
+
+    config_dir = Path(env.FORGE_HOME) / "projects" / "rhaiis" / "orchestration"
+    config.init(config_dir)
+    return (
+        rhaiis_cpu_image or config.project.get_config("rhaiis.images.cpu"),
+        vanilla_cpu_image or config.project.get_config("rhaiis.images.cpu-vanilla"),
+    )
 
 
 @entrypoint
@@ -36,8 +57,11 @@ def run(
     apply_labels: bool = False,
     remove_labels: bool = False,
     dry_run: bool = False,
+    strict: bool = False,
     min_benchmark_cpu: float = 8,
     workers_only: bool = True,
+    rhaiis_cpu_image: str | None = None,
+    vanilla_cpu_image: str | None = None,
 ):
     """Diagnose OpenShift cluster suitability for CPU vLLM benchmarking.
 
@@ -45,8 +69,11 @@ def run(
         apply_labels: When True, apply rhaiis.io/* labels to worker nodes.
         remove_labels: When True, remove rhaiis.io/* CPU labels from worker nodes.
         dry_run: With apply_labels or remove_labels, print oc commands without running them.
+        strict: When True, fail on missing KServe CRDs or zero benchmark-eligible nodes.
         min_benchmark_cpu: Minimum allocatable CPU cores for cpu-benchmark label.
         workers_only: Skip control-plane nodes for checks and labeling.
+        rhaiis_cpu_image: Optional RHAIIS CPU image override for display.
+        vanilla_cpu_image: Optional vanilla CPU image override for display.
     """
     if apply_labels and remove_labels:
         raise ValueError("Cannot use --apply-labels and --remove-labels together")
@@ -97,6 +124,8 @@ def show_node_resources(args, context):
 
     print("NAME\tCPU\tMEM\tSTATUS")
     print("\n".join(rows))
+    if args.strict and not context.nodes:
+        raise RuntimeError("No eligible worker nodes found (control-plane/infra excluded)")
     return f"Node resources listed ({len(context.nodes)} worker node(s))"
 
 
@@ -119,9 +148,7 @@ def check_cpu_instruction_sets(args, context):
                 f"CPU flags not detected. "
                 f"{(flags_result.stderr or flags_result.stdout).strip()}"
             )
-            context.node_features[node] = {
-                "avx2": False, "avx512": False, "amx": False
-            }
+            context.node_features[node] = {"avx2": False, "avx512": False, "amx": False}
             continue
         stdout = flags_result.stdout
         flags_line = next(
@@ -160,8 +187,7 @@ def check_cpu_manager_policy(args, context):
         return "CPU manager policy checks skipped (remove-labels only)"
     for node in context.nodes:
         state_result = shell.run(
-            f"oc debug node/{node} -- chroot /host "
-            "cat /var/lib/kubelet/cpu_manager_state",
+            f"oc debug node/{node} -- chroot /host cat /var/lib/kubelet/cpu_manager_state",
             check=False,
         )
         policy = "unknown"
@@ -178,9 +204,7 @@ def check_cpu_manager_policy(args, context):
                 start = stdout.find("{")
                 end = stdout.rfind("}") + 1
                 if start >= 0 and end > start:
-                    policy = json.loads(stdout[start:end]).get(
-                        "policyName", "unknown"
-                    )
+                    policy = json.loads(stdout[start:end]).get("policyName", "unknown")
             except (json.JSONDecodeError, AttributeError, ValueError):
                 print(
                     f"  {node}: WARNING — failed to parse cpu_manager_state; "
@@ -190,6 +214,31 @@ def check_cpu_manager_policy(args, context):
         context.node_features.setdefault(node, {})["cpu_manager_static"] = static
         print(f"  {node}: cpuManagerPolicy={policy}")
     return f"CPU manager policy checked for {len(context.nodes)} node(s)"
+
+
+@task
+def validate_benchmark_scheduling(args, context):
+    if _skip_diagnose_checks(args) or not args.strict:
+        return "Benchmark scheduling validation skipped"
+
+    eligible = count_benchmark_eligible_nodes(
+        nodes=context.nodes,
+        node_labels=context.node_labels,
+        node_features=context.node_features,
+        node_allocatable_cpu=context.node_allocatable_cpu,
+        min_benchmark_cpu=args.min_benchmark_cpu,
+    )
+    print(
+        f"  Benchmark-eligible worker nodes: {eligible}/{len(context.nodes)} "
+        f"(selector {DEFAULT_BENCHMARK_NODE_SELECTOR})"
+    )
+    if eligible == 0:
+        raise RuntimeError(
+            f"No worker nodes match benchmark selector {DEFAULT_BENCHMARK_NODE_SELECTOR!r}. "
+            f"Nodes need AVX2 and >={args.min_benchmark_cpu:g} allocatable CPU cores. "
+            "Run with --apply-labels after fixing nodes, or lower --min-benchmark-cpu."
+        )
+    return f"Benchmark scheduling OK ({eligible} eligible node(s))"
 
 
 @task
@@ -223,19 +272,20 @@ def apply_node_labels(args, context):
         if args.dry_run:
             print(f"  [dry-run] {cmd}")
             continue
-        result = oc("label", "node", node, *[
-            f"{key}={value}" for key, value in sorted(labels.items())
-        ], "--overwrite", check=False)
+        result = oc(
+            "label",
+            "node",
+            node,
+            *[f"{key}={value}" for key, value in sorted(labels.items())],
+            "--overwrite",
+            check=False,
+        )
         if result.returncode != 0:
-            raise RuntimeError(
-                f"Failed to label node {node}: {result.stderr or result.stdout}"
-            )
+            raise RuntimeError(f"Failed to label node {node}: {result.stderr or result.stdout}")
         print(f"  {node}: {', '.join(sorted(labels.keys()))}")
 
     mode = "dry-run" if args.dry_run else "applied"
-    benchmark_nodes = sum(
-        1 for _, labels in planned if labels.get(LABEL_CPU_BENCHMARK) == "true"
-    )
+    benchmark_nodes = sum(1 for _, labels in planned if labels.get(LABEL_CPU_BENCHMARK) == "true")
     print(
         f"\n  Benchmark selector {DEFAULT_BENCHMARK_NODE_SELECTOR} matches "
         f"{benchmark_nodes}/{len(planned)} worker node(s)"
@@ -292,6 +342,10 @@ def check_kserve_crds(args, context):
         print(f"  {crd}: {status}")
     if missing:
         context.missing_crds = missing
+        if args.strict:
+            raise RuntimeError(
+                f"Missing required KServe CRDs: {', '.join(missing)}"
+            )
     return f"KServe CRDs: {len(crds) - len(missing)}/{len(crds)} installed"
 
 
@@ -299,13 +353,14 @@ def check_kserve_crds(args, context):
 def show_cpu_images(args, context):
     if _skip_diagnose_checks(args):
         return "CPU image references skipped (remove-labels only)"
-    print("  RHAIIS:  registry.redhat.io/rhaii/vllm-cpu-rhel9:3.5.0-1786546771")
-    print("  Vanilla: docker.io/vllm/vllm-openai-cpu:v0.25.1")
-    print("  (pull test requires image pull secret for RHAIIS image)")
-    print(
-        f"  Deploy nodeSelector default for CPU presets: "
-        f"{DEFAULT_BENCHMARK_NODE_SELECTOR}"
+    rhaiis_image, vanilla_image = _resolve_configured_cpu_images(
+        args.rhaiis_cpu_image,
+        args.vanilla_cpu_image,
     )
+    print(f"  RHAIIS:  {rhaiis_image}")
+    print(f"  Vanilla: {vanilla_image}")
+    print("  (pull test requires image pull secret for RHAIIS image)")
+    print(f"  Deploy nodeSelector default for CPU presets: {DEFAULT_BENCHMARK_NODE_SELECTOR}")
     return "vLLM CPU image references listed"
 
 

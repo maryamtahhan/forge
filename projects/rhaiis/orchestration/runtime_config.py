@@ -8,6 +8,12 @@ from projects.core.library import config, env, run
 logger = logging.getLogger(__name__)
 
 CONFIG_DIR = pathlib.Path(__file__).resolve().parent
+MEMORY_GIB_PER_CPU_CORE = 4
+
+
+def memory_request_for_cpu(cpu_request: str) -> str:
+    """Derive memory request from CPU request (4 GiB/core, matching CPU presets)."""
+    return f"{int(cpu_request) * MEMORY_GIB_PER_CPU_CORE}Gi"
 
 
 def init() -> None:
@@ -165,8 +171,7 @@ def merge_env_vars(accelerator: str, model: dict) -> dict:
     base.update(model.get("env_vars", {}))
     if accelerator == "cpu":
         for key in ("cpu", f"cpu-{get_cpu_flavor()}"):
-            accel_vars = config.project.get_config(
-                f"rhaiis.accelerator_env_vars.{key}") or {}
+            accel_vars = config.project.get_config(f"rhaiis.accelerator_env_vars.{key}") or {}
             base.update(accel_vars)
         return base
     accel_vars = config.project.get_config(f"rhaiis.accelerator_env_vars.{accelerator}") or {}

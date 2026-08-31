@@ -4,6 +4,7 @@
 Run with:
     PYTHONPATH=$PWD python projects/rhaiis/orchestration/test_cpu_config.py
 """
+
 from __future__ import annotations
 
 import sys
@@ -16,6 +17,7 @@ runtime_config.init()
 
 def _set(key: str, value) -> None:
     from projects.core.library import config
+
     config.project.set_config(key, value)
 
 
@@ -23,9 +25,7 @@ def test_vanilla_image_selection() -> None:
     _set("rhaiis.accelerator", "cpu")
     _set("rhaiis.cpu_flavor", "vanilla")
     image = runtime_config.get_serving_image("cpu")
-    assert "vllm-openai-cpu" in image or "vanilla" in image, (
-        f"Expected vanilla image, got: {image}"
-    )
+    assert "vllm-openai-cpu" in image or "vanilla" in image, f"Expected vanilla image, got: {image}"
     print(f"  vanilla image: {image}  OK")
 
 
@@ -33,9 +33,7 @@ def test_rhaiis_image_selection() -> None:
     _set("rhaiis.accelerator", "cpu")
     _set("rhaiis.cpu_flavor", "rhaiis")
     image = runtime_config.get_serving_image("cpu")
-    assert "rhaii" in image or "rhel9" in image, (
-        f"Expected RHAIIS image, got: {image}"
-    )
+    assert "rhaii" in image or "rhel9" in image, f"Expected RHAIIS image, got: {image}"
     print(f"  rhaiis image:  {image}  OK")
 
 
@@ -65,6 +63,13 @@ def test_tinyllama_max_model_len() -> None:
     print(f"  tinyllama max-model-len={merged['max-model-len']}  OK")
 
 
+def test_memory_request_for_cpu() -> None:
+    assert runtime_config.memory_request_for_cpu("8") == "32Gi"
+    assert runtime_config.memory_request_for_cpu("16") == "64Gi"
+    assert runtime_config.memory_request_for_cpu("32") == "128Gi"
+    print("  memory_request_for_cpu  OK")
+
+
 def test_cpu_build_resources() -> None:
     resources = _build_resources(
         accelerator="cpu",
@@ -91,6 +96,7 @@ if __name__ == "__main__":
         test_rhaiis_image_selection,
         test_ld_preload_only_on_rhaiis,
         test_tinyllama_max_model_len,
+        test_memory_request_for_cpu,
         test_cpu_build_resources,
     ]
     for t in tests:

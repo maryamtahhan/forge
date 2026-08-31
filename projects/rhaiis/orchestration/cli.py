@@ -322,6 +322,11 @@ def concurrent_load(
 
     if models:
         model_keys = [x.strip() for x in models.split(",") if x.strip()]
+        if not model_keys:
+            raise click.BadParameter(
+                "produced an empty list; check for stray commas",
+                param_hint="'--models'",
+            )
     elif (
         runtime_config.get_test_model_key() != _pre_model
         and runtime_config.get_test_model_key().endswith("-cpu")
@@ -330,14 +335,23 @@ def concurrent_load(
     else:
         model_keys = DEFAULT_MODEL_KEYS
 
-    cpu_request_list = (
-        [x.strip() for x in cpu_requests.split(",") if x.strip()]
-        if cpu_requests
-        else DEFAULT_CPU_REQUESTS
-    )
+    if cpu_requests:
+        cpu_request_list = [x.strip() for x in cpu_requests.split(",") if x.strip()]
+        if not cpu_request_list:
+            raise click.BadParameter(
+                "produced an empty list; check for stray commas",
+                param_hint="'--cpu-requests'",
+            )
+    else:
+        cpu_request_list = DEFAULT_CPU_REQUESTS
 
     if workloads:
         workload_keys = [x.strip() for x in workloads.split(",") if x.strip()]
+        if not workload_keys:
+            raise click.BadParameter(
+                "produced an empty list; check for stray commas",
+                param_hint="'--workloads'",
+            )
     elif (
         runtime_config.get_test_workload_key() != _pre_workload
         and runtime_config.get_test_workload_key().startswith("cpu-")

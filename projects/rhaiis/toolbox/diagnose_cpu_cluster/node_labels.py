@@ -84,12 +84,14 @@ def count_benchmark_eligible_nodes(
     node_allocatable_cpu: dict[str, float],
     min_benchmark_cpu: float = 8,
 ) -> int:
-    """Count worker nodes that match or would receive the cpu-benchmark label."""
+    """Count labeled worker nodes whose detected features still compute as eligible.
+
+    Only nodes that already carry LABEL_CPU_BENCHMARK are counted; unlabeled
+    nodes are excluded even if their features would qualify.
+    """
     eligible = 0
     for node in nodes:
-        labels = node_labels.get(node, {})
-        if labels.get(LABEL_CPU_BENCHMARK) == "true":
-            eligible += 1
+        if node_labels.get(node, {}).get(LABEL_CPU_BENCHMARK) != "true":
             continue
         features = node_features.get(node, {})
         computed = compute_node_labels(

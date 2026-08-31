@@ -80,17 +80,23 @@ def test_count_benchmark_eligible_nodes() -> None:
         "worker-3": {},
     }
     node_features = {
+        # worker-1 is labeled and its features compute as eligible → counted
+        "worker-1": {"avx2": True, "avx512": False, "amx": False, "cpu_manager_static": False},
+        # worker-2 is capable but unlabeled → must be rejected
         "worker-2": {"avx2": True, "avx512": False, "amx": False, "cpu_manager_static": False},
         "worker-3": {"avx2": False, "avx512": False, "amx": False, "cpu_manager_static": False},
     }
     node_allocatable_cpu = {"worker-1": 16.0, "worker-2": 16.0, "worker-3": 32.0}
-    assert count_benchmark_eligible_nodes(
-        nodes=nodes,
-        node_labels=node_labels,
-        node_features=node_features,
-        node_allocatable_cpu=node_allocatable_cpu,
-        min_benchmark_cpu=8,
-    ) == 2
+    assert (
+        count_benchmark_eligible_nodes(
+            nodes=nodes,
+            node_labels=node_labels,
+            node_features=node_features,
+            node_allocatable_cpu=node_allocatable_cpu,
+            min_benchmark_cpu=8,
+        )
+        == 1  # only worker-1: labeled + features eligible; worker-2 unlabeled → rejected
+    )
     print("  count_benchmark_eligible_nodes  OK")
 
 

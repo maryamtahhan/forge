@@ -10,6 +10,14 @@ logger = logging.getLogger(__name__)
 CONFIG_DIR = pathlib.Path(__file__).resolve().parent
 MEMORY_GIB_PER_CPU_CORE = 4
 
+# Args shared between GPU and CPU vLLM builds; CLI overrides land under engines.<engine>.args.
+_CPU_SHARED_ENGINE_ARG_KEYS = frozenset(
+    {
+        "tensor-parallel-size",
+        "data-parallel-size",
+    }
+)
+
 
 def memory_request_for_cpu(cpu_request: str) -> str:
     """Derive memory request from CPU request (4 GiB/core, matching CPU presets)."""
@@ -71,10 +79,12 @@ def get_engine_args(engine: str | None = None) -> dict:
     if get_accelerator() == "cpu":
         cpu_args = config.project.get_config("rhaiis.vllm_args_cpu", None)
         args = dict(cpu_args) if cpu_args else {}
-        # CLI tensor-parallel overrides land under the engine key; merge on top.
+        # CLI overrides (e.g. --tensor-parallel) land under engines.<engine>.args.
         engine_overrides = config.project.get_config(f"rhaiis.engines.{engine}.args", None)
         if engine_overrides:
-            args.update(engine_overrides)
+            for key in _CPU_SHARED_ENGINE_ARG_KEYS:
+                if key in engine_overrides:
+                    args[key] = engine_overrides[key]
         return args
     return dict(config.project.get_config(f"rhaiis.engines.{engine}.args", {}))
 

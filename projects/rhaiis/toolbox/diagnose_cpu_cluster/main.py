@@ -85,6 +85,23 @@ def _skip_diagnose_checks(args) -> bool:
     return args.remove_labels and not args.apply_labels
 
 
+def _remove_node_label_keys(node: str, keys: list[str], *, dry_run: bool) -> None:
+    """Remove rhaiis.io label keys from a node."""
+    if not keys:
+        return
+    remove_args = [f"{key}-" for key in sorted(keys)]
+    cmd = f"oc label node {node} {' '.join(remove_args)}"
+    if dry_run:
+        print(f"  [dry-run] {cmd}")
+        return
+    result = oc("label", "node", node, *remove_args, check=False)
+    if result.returncode != 0:
+        raise RuntimeError(
+            f"Failed to remove labels from node {node}: {result.stderr or result.stdout}"
+        )
+    print(f"  {node}: removed {', '.join(sorted(keys))}")
+
+
 @task
 def show_node_resources(args, context):
     nodes_result = shell.run("oc get nodes -o json", check=False)
@@ -270,20 +287,10 @@ def apply_node_labels(args, context):
         for key in keys_to_remove:
             context.node_labels[node].pop(key, None)
 
+        _remove_node_label_keys(node, keys_to_remove, dry_run=args.dry_run)
+
         if not labels:
             print(f"  {node}: no rhaiis labels (missing AVX2 or insufficient CPU)")
-            if keys_to_remove:
-                remove_args = [f"{k}-" for k in keys_to_remove]
-                cmd = f"oc label node {node} {' '.join(remove_args)}"
-                if args.dry_run:
-                    print(f"  [dry-run] {cmd}")
-                else:
-                    result = oc("label", "node", node, *remove_args, check=False)
-                    if result.returncode != 0:
-                        raise RuntimeError(
-                            f"Failed to remove labels from node {node}: "
-                            f"{result.stderr or result.stdout}"
-                        )
             continue
 
         label_args = " ".join(f"{key}={value}" for key, value in sorted(labels.items()))
@@ -376,7 +383,9 @@ def show_cpu_images(args, context):
     )
     print(f"  RHAIIS:  {rhaiis_image}")
     print(f"  Vanilla: {vanilla_image}")
-    print("  (pull test requires image pull secret for RHAIIS image)")
+    print(
+        "  (listed for reference only — does not verify registry access or pull-secret validity)"
+    )
     print(f"  Deploy nodeSelector default for CPU presets: {DEFAULT_BENCHMARK_NODE_SELECTOR}")
     return "vLLM CPU image references listed"
 

@@ -70,6 +70,31 @@ def test_memory_request_for_cpu() -> None:
     print("  memory_request_for_cpu  OK")
 
 
+def test_cpu_engine_args_exclude_gpu_defaults() -> None:
+    _set("rhaiis.accelerator", "cpu")
+    engine_args = runtime_config.get_engine_args("vllm")
+    assert "gpu-memory-utilization" not in engine_args, (
+        f"GPU-only args must not bleed into CPU engine args: {engine_args}"
+    )
+    assert "trust-remote-code" not in engine_args, (
+        f"trust-remote-code must come from model config only: {engine_args}"
+    )
+
+    from projects.core.library import config
+
+    gpu_engine_args = dict(config.project.get_config("rhaiis.engines.vllm.args"))
+    gpu_engine_args["tensor-parallel-size"] = 2
+    _set("rhaiis.engines.vllm.args", gpu_engine_args)
+    engine_args = runtime_config.get_engine_args("vllm")
+    assert engine_args.get("tensor-parallel-size") == 2, (
+        f"CLI tensor-parallel override should apply, got {engine_args}"
+    )
+    assert "gpu-memory-utilization" not in engine_args, (
+        f"GPU-only args must not bleed into CPU engine args: {engine_args}"
+    )
+    print(f"  cpu engine args isolation  OK  {engine_args}")
+
+
 def test_cpu_build_resources() -> None:
     resources = _build_resources(
         accelerator="cpu",
@@ -97,6 +122,7 @@ if __name__ == "__main__":
         test_ld_preload_only_on_rhaiis,
         test_tinyllama_max_model_len,
         test_memory_request_for_cpu,
+        test_cpu_engine_args_exclude_gpu_defaults,
         test_cpu_build_resources,
     ]
     for t in tests:

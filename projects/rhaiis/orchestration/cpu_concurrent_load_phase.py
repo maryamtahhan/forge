@@ -53,22 +53,32 @@ def do_test(
     current = 0
     failed = 0
     failed_labels: list[str] = []
+    first_failed_model: str | None = None
+    first_failed_workload: str | None = None
 
-    def _notify_cell_failure(
-        *,
-        label: str,
-        model_key: str,
-        workload_key: str,
-        error: Exception,
-    ) -> None:
+    def _record_cell_failure(*, label: str, model_key: str, workload_key: str, error: Exception) -> None:
+        nonlocal failed, first_failed_model, first_failed_workload
+        failed += 1
+        failed_labels.append(label)
+        if first_failed_model is None:
+            first_failed_model = model_key
+            first_failed_workload = workload_key
         ci.add_notification_file(
             f"concurrent-load-{label}",
             f"Concurrent load cell {label} failed: {error}",
         )
+
+    def _send_matrix_failure_alert() -> None:
+        if not failed_labels or first_failed_model is None or first_failed_workload is None:
+            return
+        summary = (
+            f"{failed}/{total} concurrent load cells failed: "
+            f"{', '.join(failed_labels)}"
+        )
         send_pipeline_failure_alert(
-            error,
-            model_key=model_key,
-            workload_keys=[workload_key],
+            RuntimeError(summary),
+            model_key=first_failed_model,
+            workload_keys=[first_failed_workload],
         )
 
     for model_key in resolved_models:
@@ -86,13 +96,13 @@ def do_test(
                             namespace=namespace,
                             deploy_cfg_overrides={
                                 "cpu_request": cpu_request,
-                                "memory_request": runtime_config.memory_request_for_cpu(cpu_request),
+                                "memory_request": runtime_config.memory_request_for_cpu(
+                                    cpu_request
+                                ),
                             },
                         )
                         if ret != 0:
-                            failed += 1
-                            failed_labels.append(label)
-                            _notify_cell_failure(
+                            _record_cell_failure(
                                 label=label,
                                 model_key=model_key,
                                 workload_key=workload_key,
@@ -101,18 +111,18 @@ def do_test(
                                 ),
                             )
                             if not continue_on_error:
+                                _send_matrix_failure_alert()
                                 return 1
                     except Exception as exc:
-                        failed += 1
-                        failed_labels.append(label)
                         logger.error("Cell %s failed", label, exc_info=True)
-                        _notify_cell_failure(
+                        _record_cell_failure(
                             label=label,
                             model_key=model_key,
                             workload_key=workload_key,
                             error=exc,
                         )
                         if not continue_on_error:
+                            _send_matrix_failure_alert()
                             raise
 
     if failed:
@@ -122,6 +132,7 @@ def do_test(
         )
         logger.error(summary)
         ci.add_notification_file("concurrent-load-summary", summary)
+        _send_matrix_failure_alert()
         return 1
 
     return 0

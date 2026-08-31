@@ -12,8 +12,6 @@ import sys
 from projects.rhaiis.orchestration import runtime_config
 from projects.rhaiis.orchestration.manifests import _build_resources
 
-runtime_config.init()
-
 
 def _set(key: str, value) -> None:
     from projects.core.library import config
@@ -115,6 +113,7 @@ def test_cpu_build_resources() -> None:
 
 
 if __name__ == "__main__":
+    runtime_config.init()
     failures: list[str] = []
     tests = [
         test_vanilla_image_selection,

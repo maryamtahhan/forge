@@ -340,8 +340,25 @@ Run offline (no cluster required) to verify CPU image selection, LD_PRELOAD
 isolation, max-model-len precedence, and resource Guaranteed QoS:
 
 ```bash
-PYTHONPATH=$PWD python projects/rhaiis/orchestration/test_cpu_config.py
+pytest projects/rhaiis/orchestration/test_cpu_config.py \
+       projects/rhaiis/orchestration/test_cpu_node_labels.py
 ```
+
+Or run the scripts directly:
+
+```bash
+PYTHONPATH=$PWD python projects/rhaiis/orchestration/test_cpu_config.py
+PYTHONPATH=$PWD python projects/rhaiis/orchestration/test_cpu_node_labels.py
+```
+
+### Related automated tests
+
+| Suite | Scope |
+|-------|-------|
+| `projects/rhaiis/orchestration/test_cpu_*.py` | CPU config, manifests, node label helpers |
+| `projects/fournos_launcher/tests/` | Fournos `submit_and_wait` regression (job launch/wait plumbing used by CPU CI; not RHAIIS-specific logic) |
+
+Both suites are registered in `pyproject.toml` `testpaths` and run with `pytest`.
 
 ## Cleanup
 

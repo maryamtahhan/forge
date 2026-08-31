@@ -234,6 +234,27 @@ def check_cpu_manager_policy(args, context):
 
 
 @task
+def check_kserve_crds(args, context):
+    if _skip_diagnose_checks(args):
+        return "KServe CRD checks skipped (remove-labels only)"
+    crds = [
+        "inferenceservices.serving.kserve.io",
+        "servingruntimes.serving.kserve.io",
+    ]
+    missing = []
+    for crd in crds:
+        status = "INSTALLED" if oc_resource_exists("crd", crd) else "MISSING"
+        if status == "MISSING":
+            missing.append(crd)
+        print(f"  {crd}: {status}")
+    if missing:
+        context.missing_crds = missing
+        if args.strict:
+            raise RuntimeError(f"Missing required KServe CRDs: {', '.join(missing)}")
+    return f"KServe CRDs: {len(crds) - len(missing)}/{len(crds)} installed"
+
+
+@task
 def validate_benchmark_scheduling(args, context):
     if _skip_diagnose_checks(args) or not args.strict:
         return "Benchmark scheduling validation skipped"
@@ -353,27 +374,6 @@ def remove_node_labels(args, context):
 
 
 @task
-def check_kserve_crds(args, context):
-    if _skip_diagnose_checks(args):
-        return "KServe CRD checks skipped (remove-labels only)"
-    crds = [
-        "inferenceservices.serving.kserve.io",
-        "servingruntimes.serving.kserve.io",
-    ]
-    missing = []
-    for crd in crds:
-        status = "INSTALLED" if oc_resource_exists("crd", crd) else "MISSING"
-        if status == "MISSING":
-            missing.append(crd)
-        print(f"  {crd}: {status}")
-    if missing:
-        context.missing_crds = missing
-        if args.strict:
-            raise RuntimeError(f"Missing required KServe CRDs: {', '.join(missing)}")
-    return f"KServe CRDs: {len(crds) - len(missing)}/{len(crds)} installed"
-
-
-@task
 def show_cpu_images(args, context):
     if _skip_diagnose_checks(args):
         return "CPU image references skipped (remove-labels only)"
@@ -383,9 +383,7 @@ def show_cpu_images(args, context):
     )
     print(f"  RHAIIS:  {rhaiis_image}")
     print(f"  Vanilla: {vanilla_image}")
-    print(
-        "  (listed for reference only — does not verify registry access or pull-secret validity)"
-    )
+    print("  (listed for reference only — does not verify registry access or pull-secret validity)")
     print(f"  Deploy nodeSelector default for CPU presets: {DEFAULT_BENCHMARK_NODE_SELECTOR}")
     return "vLLM CPU image references listed"
 

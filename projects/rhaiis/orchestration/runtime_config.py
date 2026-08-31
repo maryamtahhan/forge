@@ -68,9 +68,15 @@ def get_serving_image(accelerator: str, engine: str | None = None) -> str:
         if flavor == "vanilla":
             return config.project.get_config("rhaiis.images.cpu-vanilla")
         return config.project.get_config("rhaiis.images.cpu")
+    engine_image_key = f"rhaiis.engines.{engine}.images.{accelerator}"
     try:
-        return config.project.get_config(f"rhaiis.engines.{engine}.images.{accelerator}")
-    except Exception:
+        return config.project.get_config(engine_image_key)
+    except KeyError:
+        logger.debug(
+            "Engine-scoped image missing at %s; falling back to rhaiis.images.%s",
+            engine_image_key,
+            accelerator,
+        )
         return config.project.get_config(f"rhaiis.images.{accelerator}")
 
 

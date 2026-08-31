@@ -1,9 +1,8 @@
-"""Unit tests for submit_and_wait toolbox changes on feat/rhaiis-cpu branch.
+"""Unit tests for submit_and_wait toolbox (Fournos job launch/wait).
 
-Tests cover:
-- wait=False triggers EarlyReturn from submit_fournos_job (skips remaining non-@always tasks)
-- wait_for_job_to_resolve retry logic (status transitions and failure cases)
-- check_early_return is a no-op passthrough when wait=True
+Regression coverage for Fournos integration used by RHAIIS CPU CI pipelines.
+Does not introduce submit_and_wait behavior — it guards existing EarlyReturn,
+status polling, and retry configuration.
 """
 
 from __future__ import annotations

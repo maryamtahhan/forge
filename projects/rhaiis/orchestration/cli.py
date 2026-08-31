@@ -299,10 +299,6 @@ def concurrent_load(
     dry_run: bool,
 ):
     """Run the concurrent load matrix: models x cpu_requests x workloads."""
-    # Snapshot global defaults before presets so we can detect preset overrides.
-    _pre_model = runtime_config.get_test_model_key()
-    _pre_workload = runtime_config.get_test_workload_key()
-
     for name in preset:
         config.project.apply_preset(name)
 
@@ -327,11 +323,6 @@ def concurrent_load(
                 "produced an empty list; check for stray commas",
                 param_hint="'--models'",
             )
-    elif (
-        runtime_config.get_test_model_key() != _pre_model
-        and runtime_config.get_test_model_key().endswith("-cpu")
-    ):
-        model_keys = [runtime_config.get_test_model_key()]
     else:
         model_keys = DEFAULT_MODEL_KEYS
 
@@ -352,11 +343,6 @@ def concurrent_load(
                 "produced an empty list; check for stray commas",
                 param_hint="'--workloads'",
             )
-    elif (
-        runtime_config.get_test_workload_key() != _pre_workload
-        and runtime_config.get_test_workload_key().startswith("cpu-")
-    ):
-        workload_keys = [runtime_config.get_test_workload_key()]
     else:
         workload_keys = DEFAULT_WORKLOAD_KEYS
     resolved_ns = namespace or runtime_config.get_namespace()

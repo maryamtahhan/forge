@@ -131,7 +131,7 @@ def test(
     from projects.rhaiis.orchestration import test_phase
 
     try:
-        test_phase.run(
+        ret = test_phase.run(
             model_key=model_key,
             workload_keys=[workload_key],
             namespace=namespace,
@@ -140,6 +140,9 @@ def test(
     except Exception as exc:
         click.echo(f"Run failed: {exc}")
         raise SystemExit(1) from exc
+
+    if ret != 0:
+        raise SystemExit(ret)
 
     click.echo("Benchmark completed successfully.")
 
@@ -173,7 +176,9 @@ def _apply_cli_overrides(
     if serving_image:
         if resolved_accel == "cpu":
             flavor = runtime_config.get_cpu_flavor()
-            cpu_image_key = "rhaiis.images.cpu-vanilla" if flavor == "vanilla" else "rhaiis.images.cpu"
+            cpu_image_key = (
+                "rhaiis.images.cpu-vanilla" if flavor == "vanilla" else "rhaiis.images.cpu"
+            )
             config.project.set_config(cpu_image_key, serving_image)
         else:
             config.project.set_config(
@@ -246,19 +251,26 @@ def _print_dry_run(
 
 @cli.command("concurrent-load")
 @click.option(
-    "--preset", "-p", multiple=True,
+    "--preset",
+    "-p",
+    multiple=True,
     help="Preset name(s) from presets.d/",
 )
 @click.option(
-    "--models", "-m", default=None,
+    "--models",
+    "-m",
+    default=None,
     help="Comma-separated model keys (e.g. tinyllama-cpu,qwen3-0-6b-cpu)",
 )
 @click.option(
-    "--cpu-requests", default=None,
+    "--cpu-requests",
+    default=None,
     help="Comma-separated CPU request values to sweep (e.g. 8,16,32)",
 )
 @click.option(
-    "--workloads", "-w", default=None,
+    "--workloads",
+    "-w",
+    default=None,
     help="Comma-separated workload keys (e.g. cpu-chat-baseline,cpu-rag-baseline)",
 )
 @click.option("--namespace", "-n", default=None, help="Kubernetes namespace")
@@ -310,16 +322,26 @@ def concurrent_load(
 
     if models:
         model_keys = [x.strip() for x in models.split(",") if x.strip()]
-    elif runtime_config.get_test_model_key() != _pre_model and runtime_config.get_test_model_key().endswith("-cpu"):
+    elif (
+        runtime_config.get_test_model_key() != _pre_model
+        and runtime_config.get_test_model_key().endswith("-cpu")
+    ):
         model_keys = [runtime_config.get_test_model_key()]
     else:
         model_keys = DEFAULT_MODEL_KEYS
 
-    cpu_request_list = [x.strip() for x in cpu_requests.split(",") if x.strip()] if cpu_requests else DEFAULT_CPU_REQUESTS
+    cpu_request_list = (
+        [x.strip() for x in cpu_requests.split(",") if x.strip()]
+        if cpu_requests
+        else DEFAULT_CPU_REQUESTS
+    )
 
     if workloads:
         workload_keys = [x.strip() for x in workloads.split(",") if x.strip()]
-    elif runtime_config.get_test_workload_key() != _pre_workload and runtime_config.get_test_workload_key().startswith("cpu-"):
+    elif (
+        runtime_config.get_test_workload_key() != _pre_workload
+        and runtime_config.get_test_workload_key().startswith("cpu-")
+    ):
         workload_keys = [runtime_config.get_test_workload_key()]
     else:
         workload_keys = DEFAULT_WORKLOAD_KEYS

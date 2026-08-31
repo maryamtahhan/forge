@@ -264,9 +264,28 @@ def apply_node_labels(args, context):
         raise RuntimeError("No worker nodes found to label")
 
     for node, labels in planned:
+        # Reconcile: remove managed keys absent from newly computed labels.
+        current_managed = find_managed_labels_on_node(context.node_labels.get(node, {}))
+        keys_to_remove = sorted(k for k in current_managed if k not in labels)
+        for key in keys_to_remove:
+            context.node_labels[node].pop(key, None)
+
         if not labels:
             print(f"  {node}: no rhaiis labels (missing AVX2 or insufficient CPU)")
+            if keys_to_remove:
+                remove_args = [f"{k}-" for k in keys_to_remove]
+                cmd = f"oc label node {node} {' '.join(remove_args)}"
+                if args.dry_run:
+                    print(f"  [dry-run] {cmd}")
+                else:
+                    result = oc("label", "node", node, *remove_args, check=False)
+                    if result.returncode != 0:
+                        raise RuntimeError(
+                            f"Failed to remove labels from node {node}: "
+                            f"{result.stderr or result.stdout}"
+                        )
             continue
+
         label_args = " ".join(f"{key}={value}" for key, value in sorted(labels.items()))
         cmd = f"oc label node {node} {label_args} --overwrite"
         if args.dry_run:
@@ -343,9 +362,7 @@ def check_kserve_crds(args, context):
     if missing:
         context.missing_crds = missing
         if args.strict:
-            raise RuntimeError(
-                f"Missing required KServe CRDs: {', '.join(missing)}"
-            )
+            raise RuntimeError(f"Missing required KServe CRDs: {', '.join(missing)}")
     return f"KServe CRDs: {len(crds) - len(missing)}/{len(crds)} installed"
 
 

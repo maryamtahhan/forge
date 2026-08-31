@@ -9,13 +9,27 @@ CPU image.
 ### 1. Log in to OpenShift
 
 ```bash
-oc login --token=<token> --server=<server> --insecure-skip-tls-verify=true
+oc login --token=<token> --server=<server>
+```
+
+If the cluster uses a self-signed or private CA, configure the trusted certificate
+instead of skipping TLS verification:
+
+```bash
+# One-time: add the cluster CA to the system trust store (RHEL/Fedora)
+sudo cp cluster-ca.crt /etc/pki/ca-trust/source/anchors/
+sudo update-ca-trust
+
+# Or pass the CA file directly to oc login
+oc login --token=<token> --server=<server> --certificate-authority=cluster-ca.crt
 ```
 
 ### 2. Diagnose the cluster
 
-Run the diagnostic toolbox to verify CPU instruction sets, KServe availability,
-and image pull capability before committing to a namespace:
+Run the diagnostic toolbox to verify CPU instruction sets and KServe availability
+before committing to a namespace. It lists the configured CPU image references but
+does **not** verify registry access or pull-secret validity — confirm those
+separately (e.g. `podman pull` or a test pod) before deploying:
 
 ```bash
 ./bin/run_toolbox rhaiis diagnose_cpu_cluster

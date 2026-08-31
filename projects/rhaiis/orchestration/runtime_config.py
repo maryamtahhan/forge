@@ -70,8 +70,12 @@ def get_engine_args(engine: str | None = None) -> dict:
     engine = engine or get_engine()
     if get_accelerator() == "cpu":
         cpu_args = config.project.get_config("rhaiis.vllm_args_cpu", None)
-        if cpu_args:
-            return dict(cpu_args)
+        args = dict(cpu_args) if cpu_args else {}
+        # CLI tensor-parallel overrides land under the engine key; merge on top.
+        engine_overrides = config.project.get_config(f"rhaiis.engines.{engine}.args", None)
+        if engine_overrides:
+            args.update(engine_overrides)
+        return args
     return dict(config.project.get_config(f"rhaiis.engines.{engine}.args", {}))
 
 

@@ -71,7 +71,6 @@ deploy:
   node_selector: {}
 
 vllm_args_cpu:
-  trust-remote-code: true
   no-enable-log-requests: true
   uvicorn-log-level: debug
   tensor-parallel-size: 1

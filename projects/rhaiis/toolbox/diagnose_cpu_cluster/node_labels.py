@@ -39,11 +39,12 @@ def parse_cpu_cores(allocatable_cpu: str) -> float:
 
 def is_worker_node(node_labels: dict[str, str]) -> bool:
     """Return True if the node is eligible for CPU benchmark workloads."""
-    if "node-role.kubernetes.io/control-plane" in node_labels:
-        return False
-    if "node-role.kubernetes.io/master" in node_labels:
-        return False
-    return True
+    _excluded_roles = {
+        "node-role.kubernetes.io/control-plane",
+        "node-role.kubernetes.io/master",
+        "node-role.kubernetes.io/infra",
+    }
+    return _excluded_roles.isdisjoint(node_labels)
 
 
 def compute_node_labels(

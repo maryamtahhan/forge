@@ -112,6 +112,17 @@ def check_cpu_instruction_sets(args, context):
             "'grep -m1 flags /proc/cpuinfo 2>/dev/null'",
             check=False,
         )
+        if flags_result.returncode != 0:
+            print(
+                f"  {node}: WARNING — oc debug failed "
+                f"(rc={flags_result.returncode}); "
+                f"CPU flags not detected. "
+                f"{(flags_result.stderr or flags_result.stdout).strip()}"
+            )
+            context.node_features[node] = {
+                "avx2": False, "avx512": False, "amx": False
+            }
+            continue
         stdout = flags_result.stdout
         flags_line = next(
             (line for line in stdout.splitlines() if "flags" in line),
@@ -154,14 +165,27 @@ def check_cpu_manager_policy(args, context):
             check=False,
         )
         policy = "unknown"
-        try:
-            stdout = state_result.stdout
-            start = stdout.find("{")
-            end = stdout.rfind("}") + 1
-            if start >= 0 and end > start:
-                policy = json.loads(stdout[start:end]).get("policyName", "unknown")
-        except (json.JSONDecodeError, AttributeError, ValueError):
-            policy = "unknown"
+        if state_result.returncode != 0:
+            print(
+                f"  {node}: WARNING — oc debug failed "
+                f"(rc={state_result.returncode}); "
+                f"CPU manager policy not detected. "
+                f"{(state_result.stderr or state_result.stdout).strip()}"
+            )
+        else:
+            try:
+                stdout = state_result.stdout
+                start = stdout.find("{")
+                end = stdout.rfind("}") + 1
+                if start >= 0 and end > start:
+                    policy = json.loads(stdout[start:end]).get(
+                        "policyName", "unknown"
+                    )
+            except (json.JSONDecodeError, AttributeError, ValueError):
+                print(
+                    f"  {node}: WARNING — failed to parse cpu_manager_state; "
+                    "policy reported as unknown"
+                )
         static = policy == "static"
         context.node_features.setdefault(node, {})["cpu_manager_static"] = static
         print(f"  {node}: cpuManagerPolicy={policy}")

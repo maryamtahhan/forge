@@ -170,6 +170,7 @@ def pre_cleanup(ctx):
 @ci_lib.safe_ci_entrypoint
 def post_cleanup(ctx):
     """Post-cleanup phase - Clean up resources after test."""
+    cleanup_result = None
     try:
         if runtime_config.get_accelerator() == "cpu":
             from projects.rhaiis.toolbox.diagnose_cpu_cluster.main import (
@@ -179,7 +180,8 @@ def post_cleanup(ctx):
             diagnose_cpu_cluster(remove_labels=True)
     finally:
         _check_pipeline_failure_and_notify()
-        return prepare_rhaiis.cleanup()
+        cleanup_result = prepare_rhaiis.cleanup()
+    return cleanup_result
 
 
 @main.command()

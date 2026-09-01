@@ -97,6 +97,12 @@ def resolve_hardware_request(hardware_spec: dict) -> dict:
     if hardware_spec.get("gpuType"):
         return hardware_spec
 
+    # No hardware section in the FournosJob → CPU/no-hardware job, don't add GPU resources.
+    # GPU jobs submitted via fournos_launcher always have both gpuCount and gpuType set
+    # (enforced by submit.py pair validation), so they always hit the gpuType check above.
+    if not hardware_spec:
+        return {}
+
     accelerator = runtime_config.get_accelerator()
     if accelerator == "cpu":
         return {}
@@ -164,12 +170,16 @@ def pre_cleanup(ctx):
 @ci_lib.safe_ci_entrypoint
 def post_cleanup(ctx):
     """Post-cleanup phase - Clean up resources after test."""
-    if runtime_config.get_accelerator() == "cpu":
-        from projects.rhaiis.toolbox.diagnose_cpu_cluster.main import run as diagnose_cpu_cluster
+    try:
+        if runtime_config.get_accelerator() == "cpu":
+            from projects.rhaiis.toolbox.diagnose_cpu_cluster.main import (
+                run as diagnose_cpu_cluster,
+            )
 
-        diagnose_cpu_cluster(remove_labels=True)
-    _check_pipeline_failure_and_notify()
-    return prepare_rhaiis.cleanup()
+            diagnose_cpu_cluster(remove_labels=True)
+    finally:
+        _check_pipeline_failure_and_notify()
+        return prepare_rhaiis.cleanup()
 
 
 @main.command()
@@ -179,9 +189,12 @@ def preflight(ctx) -> int:
     """Preflight check phase - Validate that the cluster is ready for testing."""
 
     if runtime_config.get_accelerator() == "cpu":
-        from projects.rhaiis.toolbox.diagnose_cpu_cluster.main import run as diagnose_cpu_cluster
+        from projects.rhaiis.toolbox.diagnose_cpu_cluster.main import (
+            run as diagnose_cpu_cluster,
+        )
 
-        diagnose_cpu_cluster(strict=True, apply_labels=True)
+        diagnose_cpu_cluster(apply_labels=True)
+        diagnose_cpu_cluster(strict=True)
 
     return 0
 

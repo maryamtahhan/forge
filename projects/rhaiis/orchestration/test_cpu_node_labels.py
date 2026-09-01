@@ -18,6 +18,7 @@ from projects.rhaiis.toolbox.diagnose_cpu_cluster.node_labels import (
     is_worker_node,
     parse_cpu_cores,
     parse_cpu_flags,
+    select_benchmark_tier,
 )
 
 
@@ -113,6 +114,63 @@ def test_find_managed_labels_on_node() -> None:
     print("  find_managed_labels_on_node  OK")
 
 
+def test_select_benchmark_tier() -> None:
+    amx_features = {"avx2": True, "avx512": True, "amx": True}
+    avx512_features = {"avx2": True, "avx512": True, "amx": False}
+    avx2_features = {"avx2": True, "avx512": False, "amx": False}
+    cpu = {"node-a": 16.0, "node-b": 16.0, "node-c": 16.0}
+
+    # AMX wins when present
+    assert select_benchmark_tier({"node-a": amx_features, "node-b": avx512_features}, cpu) == "amx"
+    # AVX-512 wins when no AMX
+    assert (
+        select_benchmark_tier({"node-a": avx512_features, "node-b": avx2_features}, cpu) == "avx512"
+    )
+    # AVX2 is the fallback
+    assert select_benchmark_tier({"node-a": avx2_features}, cpu) == "avx2"
+    # Nodes below min_benchmark_cpu are excluded from tier selection
+    assert (
+        select_benchmark_tier(
+            {"node-a": amx_features, "node-b": avx2_features},
+            {"node-a": 4.0, "node-b": 16.0},
+            min_benchmark_cpu=8,
+        )
+        == "avx2"
+    )
+    print("  select_benchmark_tier  OK")
+
+
+def test_compute_node_labels_with_tier() -> None:
+    amx_node = dict(
+        avx2=True, avx512=True, amx=True, cpu_manager_static=False, allocatable_cpu_cores=16
+    )
+    avx512_node = dict(
+        avx2=True, avx512=True, amx=False, cpu_manager_static=False, allocatable_cpu_cores=16
+    )
+    avx2_node = dict(
+        avx2=True, avx512=False, amx=False, cpu_manager_static=False, allocatable_cpu_cores=16
+    )
+
+    # AMX tier: only AMX nodes get cpu-benchmark
+    assert compute_node_labels(**amx_node, benchmark_tier="amx").get(LABEL_CPU_BENCHMARK) == "true"
+    assert LABEL_CPU_BENCHMARK not in compute_node_labels(**avx512_node, benchmark_tier="amx")
+    assert LABEL_CPU_BENCHMARK not in compute_node_labels(**avx2_node, benchmark_tier="amx")
+
+    # AVX-512 tier: only avx512 (non-AMX) nodes get cpu-benchmark
+    assert LABEL_CPU_BENCHMARK not in compute_node_labels(**amx_node, benchmark_tier="avx512")
+    assert (
+        compute_node_labels(**avx512_node, benchmark_tier="avx512").get(LABEL_CPU_BENCHMARK)
+        == "true"
+    )
+    assert LABEL_CPU_BENCHMARK not in compute_node_labels(**avx2_node, benchmark_tier="avx512")
+
+    # None (default): all eligible nodes get cpu-benchmark
+    assert compute_node_labels(**amx_node).get(LABEL_CPU_BENCHMARK) == "true"
+    assert compute_node_labels(**avx512_node).get(LABEL_CPU_BENCHMARK) == "true"
+    assert compute_node_labels(**avx2_node).get(LABEL_CPU_BENCHMARK) == "true"
+    print("  compute_node_labels (tier-filtered)  OK")
+
+
 def test_build_inferenceservice_node_selector() -> None:
     manifest = build_inferenceservice(
         deployment_name="tinyllama",
@@ -142,6 +200,8 @@ if __name__ == "__main__":
         test_parse_cpu_cores,
         test_is_worker_node,
         test_compute_node_labels,
+        test_compute_node_labels_with_tier,
+        test_select_benchmark_tier,
         test_count_benchmark_eligible_nodes,
         test_find_managed_labels_on_node,
         test_build_inferenceservice_node_selector,

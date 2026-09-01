@@ -47,6 +47,27 @@ def is_worker_node(node_labels: dict[str, str]) -> bool:
     return _excluded_roles.isdisjoint(node_labels)
 
 
+def select_benchmark_tier(
+    node_features: dict[str, dict],
+    node_allocatable_cpu: dict[str, float],
+    min_benchmark_cpu: float = 8,
+) -> str:
+    """Return the best CPU tier available across nodes with sufficient cores.
+
+    Preference: AMX > AVX-512 > AVX2.
+    """
+    eligible = {
+        node: features
+        for node, features in node_features.items()
+        if features.get("avx2") and node_allocatable_cpu.get(node, 0) >= min_benchmark_cpu
+    }
+    if any(f.get("amx") for f in eligible.values()):
+        return "amx"
+    if any(f.get("avx512") for f in eligible.values()):
+        return "avx512"
+    return "avx2"
+
+
 def compute_node_labels(
     *,
     avx2: bool,
@@ -55,8 +76,13 @@ def compute_node_labels(
     cpu_manager_static: bool,
     allocatable_cpu_cores: float,
     min_benchmark_cpu: float = 8,
+    benchmark_tier: str | None = None,
 ) -> dict[str, str]:
-    """Compute rhaiis.io/* labels from detected node capabilities."""
+    """Compute rhaiis.io/* labels from detected node capabilities.
+
+    benchmark_tier: restrict cpu-benchmark label to nodes at this tier
+    ("amx", "avx512", or "avx2"). None means any AVX2-capable node qualifies.
+    """
     labels: dict[str, str] = {}
     if avx2:
         labels[LABEL_CPU_VLLM_CAPABLE] = "true"
@@ -67,7 +93,9 @@ def compute_node_labels(
     if cpu_manager_static:
         labels[LABEL_CPU_MANAGER_STATIC] = "true"
     if avx2 and allocatable_cpu_cores >= min_benchmark_cpu:
-        labels[LABEL_CPU_BENCHMARK] = "true"
+        node_tier = "amx" if amx else ("avx512" if avx512 else "avx2")
+        if benchmark_tier is None or node_tier == benchmark_tier:
+            labels[LABEL_CPU_BENCHMARK] = "true"
     return labels
 
 

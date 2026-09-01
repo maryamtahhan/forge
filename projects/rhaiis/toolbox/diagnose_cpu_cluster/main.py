@@ -28,6 +28,7 @@ from projects.rhaiis.toolbox.diagnose_cpu_cluster.node_labels import (
     is_worker_node,
     parse_cpu_cores,
     parse_cpu_flags,
+    select_benchmark_tier,
 )
 
 
@@ -285,6 +286,13 @@ def apply_node_labels(args, context):
         print("  (skipped — pass --apply-labels to write rhaiis.io/* node labels)")
         return "Node labeling skipped (diagnose-only mode)"
 
+    tier = select_benchmark_tier(
+        node_features=context.node_features,
+        node_allocatable_cpu=context.node_allocatable_cpu,
+        min_benchmark_cpu=args.min_benchmark_cpu,
+    )
+    print(f"  Benchmark tier selected: {tier.upper()} (preference: AMX > AVX-512 > AVX2)")
+
     planned: list[tuple[str, dict[str, str]]] = []
     for node in context.nodes:
         features = context.node_features.get(node, {})
@@ -295,6 +303,7 @@ def apply_node_labels(args, context):
             cpu_manager_static=features.get("cpu_manager_static", False),
             allocatable_cpu_cores=context.node_allocatable_cpu.get(node, 0),
             min_benchmark_cpu=args.min_benchmark_cpu,
+            benchmark_tier=tier,
         )
         planned.append((node, labels))
 

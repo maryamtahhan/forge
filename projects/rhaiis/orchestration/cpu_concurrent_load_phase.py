@@ -56,7 +56,9 @@ def do_test(
     first_failed_model: str | None = None
     first_failed_workload: str | None = None
 
-    def _record_cell_failure(*, label: str, model_key: str, workload_key: str, error: Exception) -> None:
+    def _record_cell_failure(
+        *, label: str, model_key: str, workload_key: str, error: Exception
+    ) -> None:
         nonlocal failed, first_failed_model, first_failed_workload
         failed += 1
         failed_labels.append(label)
@@ -71,10 +73,7 @@ def do_test(
     def _send_matrix_failure_alert() -> None:
         if not failed_labels or first_failed_model is None or first_failed_workload is None:
             return
-        summary = (
-            f"{failed}/{total} concurrent load cells failed: "
-            f"{', '.join(failed_labels)}"
-        )
+        summary = f"{failed}/{total} concurrent load cells failed: {', '.join(failed_labels)}"
         send_pipeline_failure_alert(
             RuntimeError(summary),
             model_key=first_failed_model,
@@ -126,10 +125,7 @@ def do_test(
                             raise
 
     if failed:
-        summary = (
-            f"{failed}/{total} concurrent load cells failed: "
-            f"{', '.join(failed_labels)}"
-        )
+        summary = f"{failed}/{total} concurrent load cells failed: {', '.join(failed_labels)}"
         logger.error(summary)
         ci.add_notification_file("concurrent-load-summary", summary)
         _send_matrix_failure_alert()

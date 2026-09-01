@@ -11,7 +11,7 @@ import time
 
 import pytest
 
-from projects.core.dsl import always, execute_tasks, retry, shell, task
+from projects.core.dsl import always, execute_tasks, shell, task
 from projects.core.dsl.control_flow import EarlyReturn
 from projects.core.dsl.runtime import TaskExecutionError
 from projects.core.dsl.script_manager import reset_script_manager
@@ -81,6 +81,8 @@ def test_resolve_returns_truthy_on_pending(monkeypatch):
     reset_script_manager()
     monkeypatch.setattr(time, "sleep", lambda s: None)
 
+    from projects.fournos_launcher.toolbox.submit_and_wait.main import wait_for_job_to_resolve
+
     calls = {"n": 0}
 
     def fake_run(cmd, check=True, **kwargs):
@@ -91,28 +93,18 @@ def test_resolve_returns_truthy_on_pending(monkeypatch):
 
     monkeypatch.setattr(shell, "run", fake_run)
 
-    reset_script_manager()
-
     @task
     def setup(args, ctx):
         ctx.final_job_name = "test-job"
 
-    results = []
-
-    @retry(attempts=10, delay=0, backoff=1.0)
-    @task
-    def poll(args, ctx):
-        result = fake_run("")
-        status = result.stdout.strip()
-        if status == "Resolving":
-            return False
-        if status == "Pending":
-            results.append("resolved")
-            return f"Job {ctx.final_job_name} resolved"
-        return False
-
-    execute_tasks(locals())
-    assert results == ["resolved"]
+    result = execute_tasks(
+        {
+            "namespace": "fournos-jobs",
+            "setup": setup,
+            "wait_for_job_to_resolve": wait_for_job_to_resolve,
+        }
+    )
+    assert result
 
 
 def test_resolve_raises_on_not_found(monkeypatch):
@@ -120,22 +112,29 @@ def test_resolve_raises_on_not_found(monkeypatch):
     reset_script_manager()
     monkeypatch.setattr(time, "sleep", lambda s: None)
 
+    from projects.fournos_launcher.toolbox.submit_and_wait.main import (
+        FournosJobFailureError,
+        wait_for_job_to_resolve,
+    )
+
     def fake_run(cmd, check=True, **kwargs):
         return _make_result(stdout="", stderr="not found", returncode=1)
 
     monkeypatch.setattr(shell, "run", fake_run)
 
-    from projects.fournos_launcher.toolbox.submit_and_wait.main import (
-        FournosJobFailureError,
-    )
+    @task
+    def setup(args, ctx):
+        ctx.final_job_name = "test-job"
 
-    # Simulate the not-found path directly
-    result = fake_run("oc get fournosjob ...", check=False)
-    assert not result.success
-    assert "not found" in result.stderr.lower()
-
-    with pytest.raises(FournosJobFailureError):
-        raise FournosJobFailureError("test-job", "Job not found", "fournos-jobs", "not_found")
+    with pytest.raises(TaskExecutionError) as ei:
+        execute_tasks(
+            {
+                "namespace": "fournos-jobs",
+                "setup": setup,
+                "wait_for_job_to_resolve": wait_for_job_to_resolve,
+            }
+        )
+    assert isinstance(ei.value.__cause__, FournosJobFailureError)
 
 
 def test_resolve_raises_on_stopping(monkeypatch):
@@ -145,78 +144,55 @@ def test_resolve_raises_on_stopping(monkeypatch):
 
     from projects.fournos_launcher.toolbox.submit_and_wait.main import (
         FournosJobFailureError,
+        wait_for_job_to_resolve,
     )
 
-    calls = {"n": 0}
-
     def fake_run(cmd, check=True, **kwargs):
-        calls["n"] += 1
         return _make_result(stdout="Stopping")
 
     monkeypatch.setattr(shell, "run", fake_run)
 
-    @retry(attempts=5, delay=0, backoff=1.0)
     @task
-    def poll(args, ctx):
-        result = fake_run("oc get...")
-        if result.stdout.strip() == "Stopping":
-            raise FournosJobFailureError("test-job", "Job stopped in its early stages", "ns")
-        return False
-
-    reset_script_manager()
-
-    @retry(attempts=5, delay=0, backoff=1.0)
-    @task
-    def poll2(args, ctx):
-        result = fake_run("oc get...")
-        if result.stdout.strip() == "Stopping":
-            raise FournosJobFailureError("test-job", "stopped", "ns")
-        return False
+    def setup(args, ctx):
+        ctx.final_job_name = "test-job"
 
     with pytest.raises(TaskExecutionError) as ei:
-        execute_tasks({"poll2": poll2})
+        execute_tasks(
+            {
+                "namespace": "fournos-jobs",
+                "setup": setup,
+                "wait_for_job_to_resolve": wait_for_job_to_resolve,
+            }
+        )
     assert isinstance(ei.value.__cause__, FournosJobFailureError)
 
 
 def test_resolve_succeeds_immediately_when_already_running(monkeypatch):
     """If job is already Running/Admitted/Succeeded, wait_for_job_to_resolve returns immediately."""
-    reset_script_manager()
     monkeypatch.setattr(time, "sleep", lambda s: None)
 
+    from projects.fournos_launcher.toolbox.submit_and_wait.main import wait_for_job_to_resolve
+
     for terminal_status in ["Running", "Admitted", "Succeeded"]:
-        calls = {"n": 0}
-
-        def fake_run(cmd, check=True, **kwargs):
-            calls["n"] += 1
-            return _make_result(stdout=terminal_status)
-
-        results = []
-
-        @retry(attempts=5, delay=0, backoff=1.0)
-        @task
-        def poll(args, ctx):
-            result = fake_run("oc get...")
-            status = result.stdout.strip()
-            if status in ("Running", "Admitted", "Succeeded"):
-                results.append(f"resolved:{status}")
-                return f"resolved:{status}"
-            return False
-
         reset_script_manager()
 
-        @retry(attempts=5, delay=0, backoff=1.0)
-        @task
-        def poll_check(args, ctx):
-            result = fake_run("oc get...")
-            status = result.stdout.strip()
-            if status in ("Running", "Admitted", "Succeeded"):
-                results.append(f"resolved:{status}")
-                return f"resolved:{status}"
-            return False
+        def fake_run(cmd, check=True, status=terminal_status, **kwargs):
+            return _make_result(stdout=status)
 
-        execute_tasks({"poll_check": poll_check})
-        assert results == [f"resolved:{terminal_status}"], f"Failed for status={terminal_status}"
-        results.clear()
+        monkeypatch.setattr(shell, "run", fake_run)
+
+        @task
+        def setup(args, ctx):
+            ctx.final_job_name = "test-job"
+
+        result = execute_tasks(
+            {
+                "namespace": "fournos-jobs",
+                "setup": setup,
+                "wait_for_job_to_resolve": wait_for_job_to_resolve,
+            }
+        )
+        assert result, f"Expected truthy result for status={terminal_status}"
 
 
 # ---------------------------------------------------------------------------

@@ -164,6 +164,10 @@ def pre_cleanup(ctx):
 @ci_lib.safe_ci_entrypoint
 def post_cleanup(ctx):
     """Post-cleanup phase - Clean up resources after test."""
+    if runtime_config.get_accelerator() == "cpu":
+        from projects.rhaiis.toolbox.diagnose_cpu_cluster.main import run as diagnose_cpu_cluster
+
+        diagnose_cpu_cluster(remove_labels=True)
     _check_pipeline_failure_and_notify()
     return prepare_rhaiis.cleanup()
 
@@ -177,7 +181,7 @@ def preflight(ctx) -> int:
     if runtime_config.get_accelerator() == "cpu":
         from projects.rhaiis.toolbox.diagnose_cpu_cluster.main import run as diagnose_cpu_cluster
 
-        diagnose_cpu_cluster(strict=True)
+        diagnose_cpu_cluster(strict=True, apply_labels=True)
 
     return 0
 

@@ -64,6 +64,7 @@ deploy:
   memory_request: "16Gi"
   storage_source: hf
   storage_pvc: model-pvc
+  storage_pvc_size: 200Gi
   image_pull_secrets: []
   service_account_name: ""
   ready_timeout: 3600

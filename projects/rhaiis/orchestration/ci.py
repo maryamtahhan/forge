@@ -184,6 +184,35 @@ def post_cleanup(ctx):
     return cleanup_result
 
 
+def _ensure_model_pvc(namespace: str, pvc_name: str, pvc_size: str) -> None:
+    """Create the model-cache PVC if it does not already exist."""
+    import json
+    import subprocess
+
+    from projects.core.dsl.utils.k8s import oc_resource_exists
+
+    if oc_resource_exists("pvc", pvc_name, namespace=namespace):
+        logger.info("Model PVC %s already exists in %s", pvc_name, namespace)
+        return
+
+    logger.info("Creating model PVC %s (%s) in %s", pvc_name, pvc_size, namespace)
+    manifest = {
+        "apiVersion": "v1",
+        "kind": "PersistentVolumeClaim",
+        "metadata": {"name": pvc_name, "namespace": namespace},
+        "spec": {
+            "accessModes": ["ReadWriteMany"],
+            "resources": {"requests": {"storage": pvc_size}},
+        },
+    }
+    subprocess.run(
+        ["oc", "apply", "-f", "-", "-n", namespace],
+        input=json.dumps(manifest).encode(),
+        check=True,
+    )
+    logger.info("Model PVC %s created", pvc_name)
+
+
 @main.command()
 @click.pass_context
 @ci_lib.safe_ci_entrypoint
@@ -197,6 +226,15 @@ def preflight(ctx) -> int:
 
         diagnose_cpu_cluster(apply_labels=True)
         diagnose_cpu_cluster(strict=True)
+
+        deploy_cfg = runtime_config.get_deploy_config()
+        pvc_name = deploy_cfg.get("storage_pvc", "")
+        if pvc_name:
+            _ensure_model_pvc(
+                namespace=runtime_config.get_namespace(),
+                pvc_name=pvc_name,
+                pvc_size=deploy_cfg.get("storage_pvc_size", "200Gi"),
+            )
 
     return 0
 

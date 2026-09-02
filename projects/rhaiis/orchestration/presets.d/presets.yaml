@@ -29,8 +29,8 @@ cpu-smoke:
   tests.rhaiis.workload_key: cpu-smoke
   rhaiis.accelerator: cpu
   rhaiis.cpu_flavor: rhaiis
-  rhaiis.deploy.cpu_request: "16"
-  rhaiis.deploy.memory_request: "64Gi"
+  rhaiis.deploy.cpu_request: "4"
+  rhaiis.deploy.memory_request: "16Gi"
   rhaiis.deploy.node_selector:
     rhaiis.io/cpu-benchmark: "true"
 
@@ -39,8 +39,8 @@ vanilla-cpu-smoke:
   tests.rhaiis.workload_key: cpu-smoke
   rhaiis.accelerator: cpu
   rhaiis.cpu_flavor: vanilla
-  rhaiis.deploy.cpu_request: "16"
-  rhaiis.deploy.memory_request: "64Gi"
+  rhaiis.deploy.cpu_request: "4"
+  rhaiis.deploy.memory_request: "16Gi"
   rhaiis.deploy.node_selector:
     rhaiis.io/cpu-benchmark: "true"
 

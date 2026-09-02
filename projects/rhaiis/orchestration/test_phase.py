@@ -227,6 +227,7 @@ def _run_test(
             engine_args=engine_args,
             engine_port=engine_port,
             storage_source=deploy_cfg.get("storage_source", "hf"),
+            storage_pvc=deploy_cfg.get("storage_pvc", ""),
             gpu_count=gpu_count,
             image_pull_secrets=deploy_cfg.get("image_pull_secrets") or [],
             env_vars=env_vars,

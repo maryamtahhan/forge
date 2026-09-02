@@ -31,6 +31,7 @@ cpu-smoke:
   rhaiis.cpu_flavor: rhaiis
   rhaiis.deploy.cpu_request: "4"
   rhaiis.deploy.memory_request: "16Gi"
+  rhaiis.deploy.storage_pvc: ""
   rhaiis.deploy.node_selector:
     rhaiis.io/cpu-benchmark: "true"
 
@@ -41,6 +42,7 @@ vanilla-cpu-smoke:
   rhaiis.cpu_flavor: vanilla
   rhaiis.deploy.cpu_request: "4"
   rhaiis.deploy.memory_request: "16Gi"
+  rhaiis.deploy.storage_pvc: ""
   rhaiis.deploy.node_selector:
     rhaiis.io/cpu-benchmark: "true"
 

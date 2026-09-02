@@ -16,6 +16,7 @@ def build_servingruntime(
     engine_args: dict,
     engine_port: int,
     storage_source: str,
+    storage_pvc: str = "",
     gpu_count: int,
     image_pull_secrets: list[str] | None = None,
     env_vars: dict | None = None,
@@ -67,6 +68,7 @@ def build_servingruntime(
             engine_args=engine_args,
             engine_port=engine_port,
             storage_source=storage_source,
+            storage_pvc=storage_pvc,
             gpu_count=gpu_count,
             env_vars_list=env_vars_list,
         )
@@ -226,6 +228,7 @@ def _build_vllm_sglang_container(
     engine_args: dict,
     engine_port: int,
     storage_source: str,
+    storage_pvc: str = "",
     gpu_count: int,
     env_vars_list: list[dict],
 ) -> dict[str, Any]:
@@ -259,18 +262,22 @@ def _build_vllm_sglang_container(
         env.append({"name": "NCCL_DEBUG", "value": "WARN"})
 
     if storage_source == "hf":
+        # When a PVC is mounted at /mnt/models it acts as a persistent HF cache.
+        # Without a PVC, KServe won't mount anything there, so fall back to /tmp.
+        cache_root = "/mnt/models" if storage_pvc else "/tmp/.cache/huggingface"
+        home = "/mnt/models" if storage_pvc else "/tmp"
         env.extend(
             [
                 {"name": "HF_HUB_OFFLINE", "value": "0"},
-                {"name": "HOME", "value": "/mnt/models"},
-                {"name": "HF_HOME", "value": "/mnt/models"},
+                {"name": "HOME", "value": home},
+                {"name": "HF_HOME", "value": cache_root},
             ]
         )
         if engine != "sglang":
-            env.append({"name": "VLLM_CACHE_DIR", "value": "/mnt/models/.cache/vllm"})
+            env.append({"name": "VLLM_CACHE_DIR", "value": f"{cache_root}/.cache/vllm"})
         env.extend(
             [
-                {"name": "HF_DATASETS_CACHE", "value": "/mnt/models/.cache/huggingface/datasets"},
+                {"name": "HF_DATASETS_CACHE", "value": f"{cache_root}/.cache/huggingface/datasets"},
                 {
                     "name": "HF_TOKEN",
                     "valueFrom": {

@@ -106,4 +106,9 @@ def cleanup():
         oc("delete", "job", "--all", "-n", ns, "--ignore-not-found", check=False)
         oc("delete", "pod", "--all", "-n", ns, "--ignore-not-found", check=False)
 
+    oc(
+        "delete", "secret", "storage-config", "-n", ns,
+        "--ignore-not-found", check=False, log_stdout=False,
+    )
+
     logger.info("Cleanup complete")

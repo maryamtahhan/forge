@@ -2,9 +2,35 @@ import logging
 import os
 
 from projects.core.dsl.utils.k8s import oc
+from projects.core.library import vault
 from projects.rhaiis.orchestration import runtime_config
 
 logger = logging.getLogger(__name__)
+
+
+def _ensure_storage_config_secret(ns: str) -> None:
+    """Create storage-config secret with HF_TOKEN if it does not already exist."""
+    result = oc("get", "secret", "storage-config", "-n", ns, check=False, log_stdout=False)
+    if result.returncode == 0:
+        logger.info("Secret storage-config already exists in %s", ns)
+        return
+
+    token_path = vault.get_vault_content_path("psap-forge-hf", "hf_token")
+    if token_path is None or not token_path.exists():
+        logger.warning(
+            "psap-forge-hf vault not available — storage-config secret must be "
+            "created manually in %s for HuggingFace model downloads to work",
+            ns,
+        )
+        return
+
+    token = token_path.read_text().strip()
+    oc(
+        "create", "secret", "generic", "storage-config",
+        f"--from-literal=HF_TOKEN={token}",
+        "-n", ns,
+    )
+    logger.info("Created storage-config secret in %s", ns)
 
 
 def prepare():
@@ -43,6 +69,8 @@ def prepare():
                 f"Image pull secret {secret_name} not found in {ns} — "
                 "deployment may fail if images require authentication"
             )
+
+    _ensure_storage_config_secret(ns)
 
 
 def _delete_resources_by_suffix(resource_type: str, ns: str, suffix: str) -> None:

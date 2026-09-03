@@ -1,3 +1,5 @@
+import base64
+import json
 import logging
 import os
 
@@ -24,12 +26,17 @@ def _ensure_storage_config_secret(ns: str) -> None:
         )
         return
 
-    token = token_path.read_text().strip()
-    oc(
-        "create", "secret", "generic", "storage-config",
-        f"--from-literal=HF_TOKEN={token}",
-        "-n", ns,
-    )
+    # Apply via stdin with handled_secretly=True so the token never appears in
+    # command args, logs, or artifacts (oc() suppresses all output for secret ops).
+    token_b64 = base64.b64encode(token_path.read_text().strip().encode()).decode()
+    manifest = {
+        "apiVersion": "v1",
+        "kind": "Secret",
+        "metadata": {"name": "storage-config", "namespace": ns},
+        "type": "Opaque",
+        "data": {"HF_TOKEN": token_b64},
+    }
+    oc("apply", "-f", "-", input_text=json.dumps(manifest), handled_secretly=True)
     logger.info("Created storage-config secret in %s", ns)
 
 

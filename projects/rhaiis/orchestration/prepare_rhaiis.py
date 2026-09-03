@@ -1,43 +1,10 @@
-import base64
-import json
 import logging
 import os
 
 from projects.core.dsl.utils.k8s import oc
-from projects.core.library import vault
 from projects.rhaiis.orchestration import runtime_config
 
 logger = logging.getLogger(__name__)
-
-
-def _ensure_storage_config_secret(ns: str) -> None:
-    """Create storage-config secret with HF_TOKEN if it does not already exist."""
-    result = oc("get", "secret", "storage-config", "-n", ns, check=False, log_stdout=False)
-    if result.returncode == 0:
-        logger.info("Secret storage-config already exists in %s", ns)
-        return
-
-    token_path = vault.get_vault_content_path("psap-forge-hf", "hf_token")
-    if token_path is None or not token_path.exists():
-        logger.warning(
-            "psap-forge-hf vault not available — storage-config secret must be "
-            "created manually in %s for HuggingFace model downloads to work",
-            ns,
-        )
-        return
-
-    # Apply via stdin with handled_secretly=True so the token never appears in
-    # command args, logs, or artifacts (oc() suppresses all output for secret ops).
-    token_b64 = base64.b64encode(token_path.read_text().strip().encode()).decode()
-    manifest = {
-        "apiVersion": "v1",
-        "kind": "Secret",
-        "metadata": {"name": "storage-config", "namespace": ns},
-        "type": "Opaque",
-        "data": {"HF_TOKEN": token_b64},
-    }
-    oc("apply", "-f", "-", input_text=json.dumps(manifest), handled_secretly=True)
-    logger.info("Created storage-config secret in %s", ns)
 
 
 def prepare():
@@ -77,8 +44,6 @@ def prepare():
                 "deployment may fail if images require authentication"
             )
 
-    _ensure_storage_config_secret(ns)
-
 
 def _delete_resources_by_suffix(resource_type: str, ns: str, suffix: str) -> None:
     """Delete resources whose names end with the FJOB suffix."""
@@ -105,10 +70,5 @@ def cleanup():
         oc("delete", "servingruntime", "--all", "-n", ns, "--ignore-not-found", check=False)
         oc("delete", "job", "--all", "-n", ns, "--ignore-not-found", check=False)
         oc("delete", "pod", "--all", "-n", ns, "--ignore-not-found", check=False)
-
-    oc(
-        "delete", "secret", "storage-config", "-n", ns,
-        "--ignore-not-found", check=False, log_stdout=False,
-    )
 
     logger.info("Cleanup complete")
